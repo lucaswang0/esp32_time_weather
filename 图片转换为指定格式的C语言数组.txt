@@ -1,0 +1,62 @@
+将图片转换为指定格式的C语言数组
+
+使用脚本
+file_to_c_array.py
+
+1. 安装依赖
+bash
+pip install pillow
+2. 命令行使用
+bash
+# 基本用法（转换为 RGB565，默认变量名 image_data）
+python file_to_c_array.py weather_icon.png
+
+# 指定输出文件名和变量名
+python file_to_c_array.py weather_icon.png -o weather_icon.h -n weather_icon
+
+# 指定尺寸（宽度和高度）
+python file_to_c_array.py weather_icon.png -w 50 -he 50
+
+# 指定格式（BGR565，适合 TFT_eSPI 颜色修正）
+python file_to_c_array.py weather_icon.png -f bgr565
+
+# 查看帮助
+python file_to_c_array.py -h
+3. 生成的 .h 文件示例
+cpp
+// ============================================================
+// 图片转换自: FileToCArray 风格脚本
+// 格式: RGB565
+// 尺寸: 50×50 像素
+// 数组大小: 2500 个元素 (2 bytes/pixel)
+// ============================================================
+
+#ifndef IMAGE_DATA_H
+#define IMAGE_DATA_H
+
+#include <pgmspace.h>
+
+#define IMAGE_DATA_WIDTH 50
+#define IMAGE_DATA_HEIGHT 50
+
+const uint16_t image_data[] PROGMEM = {
+    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+    // ... 更多数据
+};
+
+#endif  // IMAGE_DATA_H
+在 Arduino 中使用
+cpp
+#include <TFT_eSPI.h>
+#include "weather_icon.h"
+
+TFT_eSPI tft = TFT_eSPI();
+
+void setup() {
+    tft.begin();
+    tft.fillScreen(TFT_BLACK);
+    
+    // 显示图标
+    tft.pushImage(0, 0, IMAGE_DATA_WIDTH, IMAGE_DATA_HEIGHT, image_data);
+}

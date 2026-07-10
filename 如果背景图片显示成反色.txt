@@ -1,0 +1,29 @@
+如果背景图显示反色，修改这一行：
+
+文件： DisplayManager.cpp:1021
+// 当前（小端序）
+pngObj->getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0x0001);
+改为大端序：
+// 改为大端序
+pngObj->getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_BIG_ENDIAN, 0x0001);
+
+原因：
+
+- PNG_RGB565_LITTLE_ENDIAN ：低字节在前（B-G-R 顺序）
+- PNG_RGB565_BIG_ENDIAN ：高字节在前（R-G-B 顺序）
+- ESP32-C3 + TFT_eSPI 的 pushImage() 通常期望 大端序 ，如果解码时用了小端序，就会导致红蓝通道互换（反色）
+如果改后仍然反色 ，可能是像素位域顺序问题，可以在 pushImage 前加颜色交换：
+
+```
+// 在 pushImage 之前，逐像素交换红蓝通道
+for (int i = 0; i < pDraw->iWidth; i
+++) {
+    uint16_t c = lineBuffer[i];
+    lineBuffer[i] = ((c & 0x001F) 
+    << 11) | (c & 0x07E0) | ((c & 
+    0xF800) >> 11);
+}
+pngTft->pushImage(pngXpos, pngYpos 
++ pDraw->y, pDraw->iWidth, 1, 
+lineBuffer);
+```

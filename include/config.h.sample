@@ -1,0 +1,62 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define BOARD_AIRM2M_CORE_ESP32C3
+
+#ifdef BOARD_ESP32_C3_DEVKITM_1
+    #define PIN_TFT_CS      0
+    #define PIN_TFT_DC      1
+    #define PIN_TFT_RST     2
+    #define PIN_TFT_MOSI    3
+    #define PIN_TFT_SCLK    4
+    #define PIN_TFT_BL      5
+    #define PIN_DS18B20     -1
+    #define PIN_LED_D4      8
+    #define PIN_DHT11       9
+    #define PIN_LED_D5      -1
+    #define PIN_TOUCH       -1
+
+#elif defined(BOARD_AIRM2M_CORE_ESP32C3)
+    #define PIN_TFT_CS      0
+    #define PIN_TFT_DC      1
+    #define PIN_TFT_RST     2
+    #define PIN_TFT_MOSI    3
+    #define PIN_TFT_SCLK    4
+    #define PIN_TFT_BL      5
+    #define PIN_DS18B20     -1
+    #define PIN_TOUCH       10
+    #define PIN_DHT11       18
+    #define PIN_LED_D4      12
+    #define PIN_LED_D5      13
+    #define PIN_I2C_SDA     7
+    #define PIN_I2C_SCL     6
+
+#else
+    #error "请在 config.h 中选择板型"
+
+#endif
+
+#define SCREEN_WIDTH  320
+#define SCREEN_HEIGHT 170
+
+#define WIFI_SSID      "YOUR_WIFI_SSID"
+#define WIFI_PASS      "YOUR_WIFI_PASSWORD"
+#define WIFI_TX_POWER_RAW 44
+
+extern const char* QWEATHER_HOST;
+extern const char* LOCATION;
+extern const char* JWT_KID;
+extern const char* JWT_SUB;
+extern const char* PRIVATE_KEY;
+
+#define GMT_OFFSET_SEC      28800
+#define DAYLIGHT_OFFSET_SEC 0
+
+#define WEATHER_UPDATE_INTERVAL  3600000
+#define TIME_SYNC_INTERVAL       3600000
+#define WIFI_CHECK_INTERVAL      10000
+#define TEMP_READ_INTERVAL       5000
+
+#define BACKLIGHT_DEFAULT_LEVEL 2
+
+#endif
