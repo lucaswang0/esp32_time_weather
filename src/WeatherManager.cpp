@@ -162,7 +162,8 @@ bool WeatherManager::fetchCurrentWeather() {
     }
     Serial.println("[Weather] JWT生成成功");
     
-    String url = String(QWEATHER_HOST) + "/v7/weather/now?location=" + LOCATION;
+    String currentLocation = locationId.isEmpty() ? LOCATION : locationId;
+    String url = String(QWEATHER_HOST) + "/v7/weather/now?location=" + currentLocation;
 
     Serial.println("\n========== 获取当前天气 ==========");
     Serial.println("[Weather] 请求URL: " + url);
@@ -319,7 +320,8 @@ bool WeatherManager::fetch3DayForecast() {
         return false;
     }
     
-    String url = String(QWEATHER_HOST) + "/v7/weather/3d?location=" + LOCATION;
+    String currentLocation = locationId.isEmpty() ? LOCATION : locationId;
+    String url = String(QWEATHER_HOST) + "/v7/weather/3d?location=" + currentLocation;
     
     Serial.println("\n========== 获取3天天气预报 ==========");
     Serial.println("[Weather] 请求URL: " + url);
@@ -463,7 +465,8 @@ bool WeatherManager::fetchCityInfo() {
         return false;
     }
     
-    String url = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + LOCATION;
+    String currentLocation = locationId.isEmpty() ? LOCATION : locationId;
+    String url = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + currentLocation;
     
     Serial.println("\n========== 获取城市信息 ==========");
     Serial.println("[Weather] 请求URL: " + url);
@@ -598,6 +601,133 @@ String WeatherManager::getWeatherCodeFromText(String text) {
     if (text.indexOf("雷") != -1) return "thunderstorm";
     if (text.indexOf("雾") != -1) return "fog";
     return "cloudy";
+}
+
+bool WeatherManager::fetchLocationByIP() {
+    if (!wifiManager.isConnected()) {
+        Serial.println("[Weather] WiFi未连接");
+        return false;
+    }
+
+    Serial.println("\n========== 通过IP获取定位 ==========");
+    
+    String url = "http://ip-api.com/json/?lang=zh-CN";
+    Serial.println("[Weather] 请求URL: " + url);
+    
+    WiFiClient client;
+    HTTPClient http;
+    
+    http.begin(client, url);
+    http.setTimeout(10000);
+    
+    int httpCode = http.GET();
+    
+    if (httpCode == HTTP_CODE_OK) {
+        String payload = http.getString();
+        Serial.println("[Weather] IP定位响应:");
+        Serial.println(payload);
+        
+        doc1024.clear();
+        DeserializationError error = deserializeJson(doc1024, payload);
+        
+        if (error) {
+            Serial.print("[Weather] IP定位JSON解析失败: ");
+            Serial.println(error.c_str());
+            http.end();
+            return false;
+        }
+        
+        const char* status = doc1024["status"];
+        if (status == NULL || strcmp(status, "success") != 0) {
+            Serial.printf("[Weather] IP定位失败: %s\n", status ? status : "NULL");
+            http.end();
+            return false;
+        }
+        
+        String cityName = doc1024["city"].as<String>();
+        String province = doc1024["regionName"].as<String>();
+        String lat = doc1024["lat"].as<String>();
+        String lon = doc1024["lon"].as<String>();
+        
+        Serial.printf("[Weather] IP定位成功: %s %s (%.4f, %.4f)\n", 
+                      province.c_str(), cityName.c_str(), 
+                      lat.toFloat(), lon.toFloat());
+        
+        if (cityName.length() == 0) {
+            Serial.println("[Weather] 未获取到城市名称");
+            http.end();
+            return false;
+        }
+        
+        String token = generateJWT();
+        if (token == "") {
+            Serial.println("[Weather] JWT生成失败");
+            http.end();
+            return false;
+        }
+        
+        String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + cityName;
+        Serial.println("[Weather] 和风天气地理查询: " + geoUrl);
+        
+        WiFiClientSecure geoClient;
+        HTTPClient https;
+        
+        geoClient.setInsecure();
+        https.begin(geoClient, geoUrl);
+        https.addHeader("Authorization", "Bearer " + token);
+        https.addHeader("User-Agent", "ESP32-Weather");
+        
+        int geoCode = https.GET();
+        
+        if (geoCode == HTTP_CODE_OK) {
+            String geoPayload = https.getString();
+            
+            doc1024.clear();
+            DeserializationError geoError = deserializeJson(doc1024, geoPayload);
+            
+            if (geoError) {
+                Serial.print("[Weather] 地理查询JSON解析失败: ");
+                Serial.println(geoError.c_str());
+                https.end();
+                http.end();
+                return false;
+            }
+            
+            const char* geoCodeStr = doc1024["code"];
+            if (geoCodeStr != NULL && strcmp(geoCodeStr, "200") == 0) {
+                JsonArray locationArray = doc1024["location"];
+                if (locationArray.size() > 0) {
+                    JsonObject location = locationArray[0];
+                    locationId = location["id"].as<String>();
+                    city = location["name"].as<String>();
+                    
+                    Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n", 
+                                  locationId.c_str(), city.c_str());
+                    
+                    https.end();
+                    http.end();
+                    return true;
+                }
+            }
+            Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
+            https.end();
+        } else {
+            Serial.printf("[Weather] 地理查询失败: %d\n", geoCode);
+            https.end();
+        }
+        http.end();
+    } else {
+        Serial.printf("[Weather] IP定位请求失败: %d\n", httpCode);
+        http.end();
+    }
+    
+    Serial.println("[Weather] IP定位失败，使用默认LOCATION");
+    locationId = LOCATION;
+    return false;
+}
+
+const String& WeatherManager::getLocationId() const {
+    return locationId;
 }
 
 const String& WeatherManager::getCity() const {

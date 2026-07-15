@@ -7,6 +7,7 @@
 #include <time.h>
 #include "WiFiManager.h"
 #include "config.h"
+#include "secrets.h"
 
 // 城市信息结构体
 struct CityInfo {
@@ -53,8 +54,15 @@ public:
     const CityInfo& getCityInfo() const;
     const DailyForecast& getForecast(int dayIndex) const;
     
+    // IP定位相关方法
+    bool fetchLocationByIP();
+    const String& getLocationId() const;
+    
 private:
     WiFiManager& wifiManager;
+    
+    // 当前使用的位置ID（通过IP定位动态获取）
+    String locationId;
     
     // 当前天气数据
     String city;
