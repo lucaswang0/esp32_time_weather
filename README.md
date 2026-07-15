@@ -18,7 +18,7 @@ time_weather_v2/
 │   ├── main.cpp            # 主入口，任务调度
 │   ├── PageManager.cpp     # 页面管理器
 │   ├── DisplayManager.cpp  # 显示管理器（背景、字体）
-│   ├── WiFiManager.cpp     # WiFi 连接管理
+│   ├── WiFiManager.cpp     # WiFi 连接管理（含 Web 配网 + ESP-Touch SmartConfig）
 │   ├── WeatherManager.cpp  # 和风天气 API 调用
 │   ├── TimeManager.cpp     # NTP 时间同步
 │   ├── AHT20BMP280Sensor.cpp # AHT20+BMP280 传感器驱动
@@ -51,7 +51,7 @@ time_weather_v2/
 | PAGE_PRESSURE | 气压页面 | 气压显示、气压预警（骤降触发） |
 | PAGE_HISTORY | 历史页面 | 温湿度、气压曲线图（每10分钟采样） |
 | PAGE_WIFI_INFO | WiFi信息 | 连接状态、SSID、IP、信号强度 |
-| PAGE_AP_MODE | AP配网 | 启动时WiFi连接失败自动进入，或长按10秒进入，提供WiFi配置门户（显示已保存WiFi列表） |
+| PAGE_AP_MODE | AP配网 | 启动时WiFi连接失败自动进入，或长按10秒进入，提供WiFi配置门户（显示已保存WiFi列表），同时支持 ESP-Touch SmartConfig 蓝牙配网 |
 | PAGE_STREAMING | 屏幕流 | 接收PC端屏幕流实时显示 |
 | PAGE_WEB_SERVER | 文件管理 | 启动WebServer，SPIFFS上传/下载/删除 |
 
@@ -68,7 +68,9 @@ time_weather_v2/
 - **智能亮度**: 根据日出日落时间自动调整背光
 - **历史数据**: 每10分钟保存一次传感器数据到 SPIFFS
 - **气压预警**: 气压骤降时自动切换到气压页面并警告
-- **AP配网**: 启动时WiFi连接失败自动进入，或长按触摸进入，提供10分钟配网倒计时，支持查看和删除已保存的WiFi列表
+- **双模式配网**: 启动时WiFi连接失败自动进入配网模式，同时支持两种配网方式：
+  - **Web 配网**: 连接 `ESP32-Weather` WiFi热点，通过浏览器访问 `192.168.4.1` 配置WiFi
+  - **ESP-Touch SmartConfig**: 使用手机APP（如ESP-Touch、乐鑫官方配网工具）发送WiFi信息，无需手动连接热点
 - **屏幕流传输**: 通过TCP接收PC屏幕画面
 - **文件管理**: WebServer页面提供SPIFFS文件管理功能
 
@@ -134,16 +136,20 @@ python server.py
 ## 使用流程
 
 1. **编译上传**: 连接ESP32，执行 `pio run --target upload`
-2. **首次启动**: ESP32自动尝试连接已保存的WiFi，如果连接失败则自动进入AP配网模式，连接成功后同步NTP时间，拉取天气数据
-3. **正常使用**: 短按触摸切换页面，双击调整亮度，长按10秒进入AP配网
-4. **屏幕流**: 在PC上启动服务器，在ESP32上切换到"屏幕流"页面接收画面
-5. **文件管理**: 切换到"文件管理"页面，在浏览器访问 `http://<ESP32_IP>/fs`
+2. **首次启动**: ESP32自动尝试连接已保存的WiFi，如果连接失败则自动进入配网模式（AP热点 + SmartConfig），连接成功后同步NTP时间，拉取天气数据
+3. **配网方式**: 
+   - **Web 配网**: 在手机/电脑上连接 `ESP32-Weather` WiFi热点，浏览器访问 `192.168.4.1` 配置WiFi
+   - **ESP-Touch**: 打开ESP-Touch手机APP，输入WiFi信息即可，无需连接热点
+4. **正常使用**: 短按触摸切换页面，双击调整亮度，长按10秒进入配网模式
+5. **屏幕流**: 在PC上启动服务器，在ESP32上切换到"屏幕流"页面接收画面
+6. **文件管理**: 切换到"文件管理"页面，在浏览器访问 `http://<ESP32_IP>/fs`
 
 ## 注意事项
 
 - SPIFFS分区大小为0.5MB，注意不要上传太大的文件
 - WebServer只在切换到"文件管理"页面时启动，离开时自动停止
-- AP模式仅通过长按触摸键10秒以上手动进入，进入后显示10分钟倒计时
+- 配网模式（AP热点 + SmartConfig）在以下情况自动进入：首次启动无WiFi配置、WiFi连接失败、长按触摸键10秒以上手动触发，进入后显示10分钟倒计时
+- SmartConfig 默认超时时间为2分钟，超时后自动停止，可继续使用 Web 配网
 - 历史数据文件（`history_*.dat`）已加入.gitignore，不会被提交
 
 ## 依赖库

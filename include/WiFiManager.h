@@ -2,7 +2,15 @@
 #define WIFI_MANAGER_H
 
 #include <WiFi.h>
-#include "WiFiConfigManager.h"
+#include <WebServer.h>
+#include <Preferences.h>
+
+#define MAX_WIFI_CREDENTIALS 5
+
+typedef struct {
+    String ssid;
+    String password;
+} WiFiCredential;
 
 class WiFiManager {
 public:
@@ -22,12 +30,54 @@ public:
     void checkAPTimeout();
     bool hasInitialConnected() const;
     
+    void begin();
+    bool autoConnect();
+    void startConfigPortal();
+    void scanNetworks();
+    void saveCredentials(const String& ssid, const String& password);
+    bool loadCredentials();
+    bool hasSavedCredentials();
+    IPAddress getIP();
+    bool isConfigMode();
+    const char* getConfigSSID();
+    const char* getConfigPassword();
+    unsigned long getAPStartTime();
+    const WiFiCredential* getSavedCredentials() const;
+    int getCredentialCount() const;
+    void forgetCredentials(const String& ssid);
+    
+    void startSmartConfig();
+    void stopSmartConfig();
+    bool isSmartConfigStarted();
+    bool isSmartConfigDone();
+    
 private:
-    WiFiConfigManager configManager;
+    void startWebServer();
+    void handleRoot();
+    void handleScan();
+    void handleSave();
+    void handleForget();
+    void handleNotFound();
+    void connectToWiFi(const char* ssid, const char* password, int timeoutMs);
+    void handleSmartConfig();
+
+    Preferences preferences;
+    WebServer* webServer;
+    bool configMode;
+    WiFiCredential savedCredentials[MAX_WIFI_CREDENTIALS];
+    int credentialCount;
+    bool scanComplete;
+    int8_t networksFound;
+    bool apStarted;
+    unsigned long apStartTime;
     int reconnectCount;
     bool initialized;
     bool _initialConnected;
-    static const unsigned long AP_TIMEOUT_MS = 10 * 60 * 1000; // 10分钟
+    bool smartConfigStarted;
+    bool smartConfigDone;
+    unsigned long smartConfigStartTime;
+    static const unsigned long AP_TIMEOUT_MS = 10 * 60 * 1000;
+    static const unsigned long SMART_CONFIG_TIMEOUT_MS = 120 * 1000;
 };
 
 #endif
