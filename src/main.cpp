@@ -9,6 +9,7 @@
 
 #include "AHT20BMP280Sensor.h"
 #include "LEDController.h"
+#include "BuzzerController.h"
 #include "TTP223Sensor.h"
 #include "PageBase.h"
 #include "PageManager.h"
@@ -21,9 +22,11 @@
 #include "APModePage.h"
 #include "StreamingPlayerPage.h"
 #include "WebServerPage.h"
+#include <driver/gpio.h>
 
 // ==================== 全局对象 ====================
 
+BuzzerController buzzerController(PIN_BUZZER);
 WiFiManager wifiManager;
 TimeManager timeManager(wifiManager);
 WeatherManager weatherManager(wifiManager);
@@ -55,6 +58,7 @@ size_t getArduinoLoopTaskStackSize(void) {
 // ==================== 背光 ====================
 
 const int BACKLIGHT_CHANNEL = 0;
+const int BUZZER_CHANNEL = 1;
 const int BACKLIGHT_LEVELS[] = {10, 80, 160, 255};
 int currentBacklightLevel = 2;
 
@@ -154,10 +158,23 @@ static void handleTouchEvent(TouchType type) {
 // ==================== setup ====================
 
 void setup() {
-    Serial.begin(115200);
-    delay(3000);
+    // 最优先：关闭蜂鸣器（低电平触发，高电平关闭）
+    // pinMode(PIN_BUZZER, OUTPUT);
+    // digitalWrite(PIN_BUZZER, HIGH);
 
-    // 1. 先挂载 SPIFFS（关键：放在屏幕初始化之前）
+    // ========== 1. 蜂鸣器PWM初始化（最优先） ==========
+    // 1. 先配置PWM参数
+    ledcSetup(LEDC_CHANNEL, LEDC_BASE_FREQ, LEDC_TIMER_BIT);
+    // 2. 在绑定引脚之前，先把占空比设为0
+    ledcWrite(LEDC_CHANNEL, 0);
+    // 3. 再绑定引脚（此时通道已经是0%占空比）
+    ledcAttachPin(PIN_BUZZER, LEDC_CHANNEL);
+
+      // ========== 2. 串口初始化 ==========
+    Serial.begin(115200);
+    delay(500);
+
+      // ========== 3. 挂载 SPIFFS ==========
     if (!SPIFFS.begin(true)) {
         Serial.println("[SPIFFS] Mount Failed - Formatting...");
         if (!SPIFFS.begin(true)) {
@@ -169,19 +186,31 @@ void setup() {
         Serial.println("[SPIFFS] Mount Success");
     }
 
-    // 屏幕背光（使用 LEDC PWM 控制，不要用 digitalWrite）
+   // ========== 4. 背光PWM初始化 ==========
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
     ledcAttachPin(PIN_TFT_BL, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, BACKLIGHT_LEVELS[currentBacklightLevel]);
 
-    // 2. 再初始化屏幕，此时 SPI 总线会被屏幕重新配置
+  // ========== 5. 屏幕初始化 ==========
     displayManager.init();
 
-    // 屏幕 init 后重新附加背光 PWM（TFT_eSPI 会重置 GPIO 状态）
+  // ========== 6. 屏幕初始化后，重新附加背光PWM ==========
+    // 先确保引脚高电平，避免闪烁
+    pinMode(PIN_TFT_BL, OUTPUT);
+    digitalWrite(PIN_TFT_BL, HIGH);
+    
     ledcDetachPin(PIN_TFT_BL);
     ledcAttachPin(PIN_TFT_BL, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, BACKLIGHT_LEVELS[currentBacklightLevel]);
     Serial.printf("[Backlight] 重新附加背光 PWM, 等级: %d\n", currentBacklightLevel);
+
+ // ========== 7. 屏幕初始化后，重新附加蜂鸣器PWM ==========
+    // TFT_eSPI.init() 可能重置了GPIO状态，所以重新附加
+    // 注意：不需要再 pinMode + digitalWrite，因为 ledcAttachPin 会接管引脚
+    ledcDetachPin(PIN_BUZZER);
+    ledcAttachPin(PIN_BUZZER, LEDC_CHANNEL);
+    ledcWrite(LEDC_CHANNEL, 0);
+    Serial.println("[Main] 蜂鸣器 PWM 重新附加，静音状态");
 
     // AHT20+BMP280
     if (!aht20Bmp280Sensor.begin()) {
@@ -195,6 +224,9 @@ void setup() {
 
     // LED
     ledController.begin();
+
+    // Buzzer
+    buzzerController.begin();
 
     // 触摸
     touchSensor.begin();
@@ -264,6 +296,14 @@ void setup() {
         lastHistorySave = millis();  // NTP 未同步，10 分钟后第一次保存
         Serial.println("[Main] NTP 未同步，历史保存将在开机 10 分钟后首次触发");
     }
+
+    // Serial.println("\n[Main] ===== 模拟钟声测试 =====");
+    // Serial.println("[Main] Testing radioChime (1 times)...");
+    // buzzerController.radioChime();
+    // delay(5000);
+    // Serial.println("[Main] 钟声测试完成");
+
+
 
     // 时间显示任务
     xTaskCreatePinnedToCore(
@@ -441,6 +481,26 @@ void loop() {
             ledController.setState(LED_STATE_OFF);
         }
     }
+    ledController.update();
+    
+    // -------- 定时报时 --------
+    static int lastChimeHour = -1;
+    int currentHour = timeManager.getHour();
+    int currentMinute = timeManager.getMinute();
+    int currentSecond = timeManager.getSecond();
+    
+    if (currentHour >= 6 && currentHour <= 19 && 
+        currentMinute == 59 && currentSecond == 55 && 
+        currentHour != lastChimeHour) {
+        lastChimeHour = currentHour;
+        Serial.println("[Chime] 定时报时触发");
+        buzzerController.radioChime();
+    } else if (currentMinute != 59 || currentSecond != 55) {
+        lastChimeHour = -1;
+    }
+
+    // -------- Buzzer 更新 --------
+    buzzerController.update();
 
     // -------- 智能亮度 --------
     if (now - lastAutoBrightnessCheck >= 60000) {

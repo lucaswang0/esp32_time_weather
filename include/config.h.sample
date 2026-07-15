@@ -12,7 +12,6 @@
     #define PIN_TFT_BL      5
     #define PIN_DS18B20     -1
     #define PIN_LED_D4      8
-    #define PIN_DHT11       9
     #define PIN_LED_D5      -1
     #define PIN_TOUCH       -1
 
@@ -25,7 +24,7 @@
     #define PIN_TFT_BL      5
     #define PIN_DS18B20     -1
     #define PIN_TOUCH       10
-    #define PIN_DHT11       18
+    #define PIN_BUZZER      18
     #define PIN_LED_D4      12
     #define PIN_LED_D5      13
     #define PIN_I2C_SDA     7
