@@ -28,6 +28,7 @@ time_weather_v2/
 │   └── secrets.cpp         # 敏感信息（JWT私钥等，需自行创建）
 ├── include/                # 头文件
 │   ├── config.h            # 引脚、WiFi、更新间隔配置（需自行创建）
+│   ├── secrets.h           # 敏感信息声明（extern）
 │   ├── PageManager.h       # 页面枚举定义
 │   ├── PageBase.h          # 页面基类
 │   ├── bg1.h~bg9.h         # 背景图（RGB565 数组）
@@ -68,6 +69,7 @@ time_weather_v2/
 - **智能亮度**: 根据日出日落时间自动调整背光
 - **历史数据**: 每10分钟保存一次传感器数据到 SPIFFS
 - **气压预警**: 气压骤降时自动切换到气压页面并警告
+- **IP自动定位**: 通过公网IP自动获取所在城市经纬度，无需手动配置LOCATION
 - **双模式配网**: 启动时WiFi连接失败自动进入配网模式，同时支持两种配网方式：
   - **Web 配网**: 连接 `ESP32-Weather` WiFi热点，通过浏览器访问 `192.168.4.1` 配置WiFi
   - **ESP-Touch SmartConfig**: 使用手机APP（如ESP-Touch、乐鑫官方配网工具）发送WiFi信息，无需手动连接热点

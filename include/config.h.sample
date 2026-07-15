@@ -1,8 +1,11 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// ==================== 板型选择 ====================
+// #define BOARD_ESP32_C3_DEVKITM_1
 #define BOARD_AIRM2M_CORE_ESP32C3
 
+// ==================== 引脚配置 ====================
 #ifdef BOARD_ESP32_C3_DEVKITM_1
     #define PIN_TFT_CS      0
     #define PIN_TFT_DC      1
@@ -10,7 +13,7 @@
     #define PIN_TFT_MOSI    3
     #define PIN_TFT_SCLK    4
     #define PIN_TFT_BL      5
-    #define PIN_DS18B20     -1
+    #define PIN_DS18B20     -1    // 6
     #define PIN_LED_D4      8
     #define PIN_DHT11       9
     #define PIN_LED_D5      -1
@@ -23,40 +26,46 @@
     #define PIN_TFT_MOSI    3
     #define PIN_TFT_SCLK    4
     #define PIN_TFT_BL      5
-    #define PIN_DS18B20     -1
+    #define PIN_DS18B20     -1    // 6
     #define PIN_TOUCH       10
     #define PIN_DHT11       18
     #define PIN_LED_D4      12
     #define PIN_LED_D5      13
-    #define PIN_I2C_SDA     7
-    #define PIN_I2C_SCL     6
+    #define PIN_I2C_SDA     7 // AHT20+BMP280
+    #define PIN_I2C_SCL     6  // AHT20+BMP280
+
 
 #else
     #error "请在 config.h 中选择板型"
 
 #endif
 
+// ==================== 显示屏配置 ====================
+// TFT_* 引脚宏已在 platformio.ini 中定义，此处不再重复定义
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 170
 
+// ==================== WiFi配置 ====================
 #define WIFI_SSID      "YOUR_WIFI_SSID"
 #define WIFI_PASS      "YOUR_WIFI_PASSWORD"
+// WiFi 发射功率（单位 0.25 dBm）
+// 可用范围: WIFI_POWER_MIN (-20 dBm) ~ WIFI_POWER_MAX (20 dBm)
+// 44 = 11.0 dBm, 40 = 10.0 dBm, 60 = 15.0 dBm, 80 = 20.0 dBm
 #define WIFI_TX_POWER_RAW 44
 
-extern const char* QWEATHER_HOST;
-extern const char* LOCATION;
-extern const char* JWT_KID;
-extern const char* JWT_SUB;
-extern const char* PRIVATE_KEY;
-
+// ==================== 时间配置 ====================
 #define GMT_OFFSET_SEC      28800
 #define DAYLIGHT_OFFSET_SEC 0
 
-#define WEATHER_UPDATE_INTERVAL  3600000
-#define TIME_SYNC_INTERVAL       3600000
-#define WIFI_CHECK_INTERVAL      10000
-#define TEMP_READ_INTERVAL       5000
+// ==================== 更新间隔配置（毫秒）====================
+#define WEATHER_UPDATE_INTERVAL  3600000 // 1 小时
+#define TIME_SYNC_INTERVAL       3600000 // 1 小时
+#define WIFI_CHECK_INTERVAL      10000   // 10 秒
+#define TEMP_READ_INTERVAL       5000    // 5 秒
 
+// ==================== 背光配置 ====================
+// BACKLIGHT_CHANNEL 在 main.cpp 中定义
 #define BACKLIGHT_DEFAULT_LEVEL 2
+
 
 #endif
