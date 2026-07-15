@@ -413,14 +413,23 @@ void loop() {
         if (wifiManager.isConnected()) {
             switch (weatherStep) {
                 case 0:
-                    Serial.println("[Main] Step 1/3: 获取城市信息");
-                    if (weatherManager.fetchCityInfo()) weatherStep = 1;
+                    Serial.println("[Main] Step 0/3: 通过IP获取定位");
+                    if (weatherManager.fetchLocationByIP()) {
+                        Serial.println("[Main] IP定位成功，继续获取城市信息");
+                    } else {
+                        Serial.println("[Main] IP定位失败，使用默认位置");
+                    }
+                    weatherStep = 1;
                     break;
                 case 1:
-                    Serial.println("[Main] Step 2/3: 获取当前天气");
-                    if (weatherManager.fetchCurrentWeather()) weatherStep = 2;
+                    Serial.println("[Main] Step 1/3: 获取城市信息");
+                    if (weatherManager.fetchCityInfo()) weatherStep = 2;
                     break;
                 case 2:
+                    Serial.println("[Main] Step 2/3: 获取当前天气");
+                    if (weatherManager.fetchCurrentWeather()) weatherStep = 3;
+                    break;
+                case 3:
                     Serial.println("[Main] Step 3/3: 获取天气预报");
                     if (weatherManager.fetch3DayForecast()) {
                         weatherStep = 0;
