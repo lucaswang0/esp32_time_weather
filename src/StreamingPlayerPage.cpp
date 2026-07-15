@@ -70,16 +70,16 @@ void StreamingPlayerPage::drawConnectingScreen() {
     tft.loadFont(font_small_20);
     tft.setTextDatum(TC_DATUM);
     tft.setTextColor(TFT_WHITE);
-    tft.drawString("Connecting to the streaming server...", 160, 60);
-    
+    tft.drawString("Connecting to the streaming server...", 0, 60);
+
     tft.setTextColor(COLOR_GRAY_DARK);
     tft.drawString(SERVER_HOST, 160, 95);
     char portStr[16];
-    snprintf(portStr, sizeof(portStr), "端口: %d", SERVER_PORT);
+    snprintf(portStr, sizeof(portStr), "Port: %d", SERVER_PORT);
     tft.drawString(portStr, 160, 115);
     
     tft.setTextColor(COLOR_GRAY_MID);
-    tft.drawString("轻触返回", 160, 146);
+    tft.drawString("Touch to return", 160, 146);
     
     tft.unloadFont();
 }
@@ -94,7 +94,7 @@ void StreamingPlayerPage::drawErrorScreen(const char* msg) {
     tft.drawString(msg, 160, 70);
     
     tft.setTextColor(COLOR_GRAY_MID);
-    tft.drawString("双击重试 轻触返回", 160, 146);
+    tft.drawString("Double tap to retry", 160, 146);
     
     tft.unloadFont();
 }

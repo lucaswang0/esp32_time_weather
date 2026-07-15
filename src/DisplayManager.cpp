@@ -135,8 +135,8 @@ void DisplayManager::init() {
     // 体感
     drawTextWithTransparentBgFont("体:--°", 225, 126, COLOR_WHITE, font_small_20);  // 体感
 
-    // DHT11湿度
-    drawTextWithTransparentBgFont("湿:--%", 225, 150, COLOR_WHITE, font_small_20);  // 室内湿度（AHT20）
+    // AHT20湿度
+    drawTextWithTransparentBgFont("湿:--%", 225, 150, COLOR_WHITE, font_small_20);
  
     Serial.println("[Display] 显示屏初始化完成");
 }
