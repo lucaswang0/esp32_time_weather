@@ -234,6 +234,8 @@ void setup() {
 
     // Buzzer
     buzzerController.begin();
+    // 播放启动自检声
+    buzzerController.startupChime();
 
     // 触摸
     touchSensor.begin();

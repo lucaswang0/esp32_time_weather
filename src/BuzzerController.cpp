@@ -65,3 +65,31 @@ void BuzzerController::radioChime() {
     
     Serial.println("[Buzzer] Radio chime finished");
 }
+
+
+/**
+ * @brief 播放设备启动自检声
+ * @param durationMs 每个音调的持续时间（毫秒），默认 80ms
+ * @param intervalMs 两个音调之间的间隔（毫秒），默认 100ms
+ */
+void BuzzerController::startupChime() {
+    if (_pin <= 0) return;
+    
+    ledcSetup(BUZZER_LEDC_CHANNEL, BUZZER_BASE_FREQ, BUZZER_RESOLUTION);
+    ledcAttachPin(_pin, BUZZER_LEDC_CHANNEL);
+    
+    // 固定的自检声逻辑（不带参数）
+    for (int freq = 600; freq <= 1200; freq += 50) {
+        ledcWriteTone(BUZZER_LEDC_CHANNEL, freq);
+        ledcWrite(BUZZER_LEDC_CHANNEL, BUZZER_MAX_DUTY / 2);
+        delay(8);
+    }
+    
+    ledcWrite(BUZZER_LEDC_CHANNEL, 0);
+    delay(100);
+    
+    ledcWriteTone(BUZZER_LEDC_CHANNEL, 2000);
+    ledcWrite(BUZZER_LEDC_CHANNEL, BUZZER_MAX_DUTY / 2);
+    delay(80);
+    ledcWrite(BUZZER_LEDC_CHANNEL, 0);
+}
