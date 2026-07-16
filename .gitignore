@@ -1,36 +1,76 @@
+# ====================
+# PlatformIO
+# ====================
 .pio/
 .pioenvs/
 .piolibdeps/
-.pio/build/
-.pio/libdeps/
+*.pyc
 
-.vscode/.browse.c_cpp.db*
+# ====================
+# VS Code
+# ====================
+.vscode/
+.vscode/**/*.db*
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
 .vscode/settings.json
 
+# ====================
+# 编译输出
+# ====================
 *.bin
 *.elf
 *.map
 *.hex
 *.d
 *.o
+*.a
 
+# ====================
+# 敏感文件
+# ====================
 include/secrets.h
+*.env
+*.key
+*.pem
+credentials.json
 
-.history_*.dat
+# ====================
+# Python
+# ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
+# ====================
+# Python-ESP32-TFT-Stream
+# ====================
+Python-ESP32-TFT-Stream/.vscode/
+Python-ESP32-TFT-Stream/__pycache__/
+Python-ESP32-TFT-Stream/*.pyc
+Python-ESP32-TFT-Stream/*.pyo
+
+# ====================
+# 编辑器/系统文件
+# ====================
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 *~
+.history_*.dat
+.idea/
+*.iml
+compile_commands.json
 
-Python-ESP32-TFT-Stream/.vscode/
-Python-ESP32-TFT-Stream/__pycache__/
-Python-ESP32-TFT-Stream/*.pyc
-
+# ====================
+# 用户特定
+# ====================
 FileToCArray/
-
 logs/
+*.log
+*.tmp
+*.temp
