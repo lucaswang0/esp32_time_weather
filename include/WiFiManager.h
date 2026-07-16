@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include <SPIFFS.h>
 
 #define MAX_WIFI_CREDENTIALS 5
 
@@ -53,6 +54,7 @@ public:
     
 private:
     void startWebServer();
+    void stopWebServer();
     void handleRoot();
     void handleScan();
     void handleSave();
@@ -60,10 +62,21 @@ private:
     void handleNotFound();
     void connectToWiFi(const char* ssid, const char* password, int timeoutMs);
     void handleSmartConfig();
+    
+    // SPIFFS 文件管理相关
+    void startFSWebServer();
+    static String sizeStr(uint64_t bytes);
+    void handleFS();
+    void handleDownload();
+    void handleUpload();
+    void handleUploadEnd();
+    void handleDelete();
 
     Preferences preferences;
     WebServer* webServer;
     bool configMode;
+    bool fsServerStarted;
+    fs::File uploadFile;
     WiFiCredential savedCredentials[MAX_WIFI_CREDENTIALS];
     int credentialCount;
     bool scanComplete;

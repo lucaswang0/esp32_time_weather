@@ -12,7 +12,6 @@ class PressurePage;
 class APModePage;
 class WiFiInfoPage;
 class StreamingPlayerPage;
-class WebServerPage;
 
 /**
  * 页面切换负责控制哪个页面显示。
@@ -29,7 +28,6 @@ public:
         PAGE_WIFI_INFO,  // 新增：网络信息页面
         PAGE_AP_MODE,
         PAGE_STREAMING,  // 新增：流媒体播放器页面
-        PAGE_WEB_SERVER, // 新增：Web服务器页面
         PAGE_COUNT
     };
 
