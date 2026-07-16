@@ -10,6 +10,7 @@ public:
     void begin();
     void update();
     void radioChime();
+    void startupChime();
     
 private:
     int _pin;

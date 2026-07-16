@@ -28,7 +28,7 @@
     #define PIN_TFT_SCLK    4
     #define PIN_TFT_BL      5
     #define PIN_TOUCH       10
-    #define PIN_BUZZER      18
+    #define PIN_BUZZER      8
     #define PIN_LED_D4      12
     #define PIN_LED_D5      13
     #define PIN_I2C_SDA     7 // AHT20+BMP280
