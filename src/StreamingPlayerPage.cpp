@@ -3,7 +3,7 @@
 #include "DisplayManager.h"
 #include <lwip/sockets.h>
 
-#define SERVER_HOST "stream.local"
+#define SERVER_HOST "my-pc.local"
 #define SERVER_PORT 8888
 
 StreamingPlayerPage::StreamingPlayerPage(DisplayManager& display) : _display(display) {
@@ -68,9 +68,9 @@ void StreamingPlayerPage::drawConnectingScreen() {
     tft.fillScreen(TFT_BLACK);
     
     tft.loadFont(font_small_20);
-    tft.setTextDatum(TC_DATUM);  // 顶部居中
+    // tft.setTextDatum(TC_DATUM);  // 顶部居中
     tft.setTextColor(TFT_WHITE);
-    tft.drawString("Connecting to the streaming server...", SCREEN_HEIGHT / 2, 60);
+    tft.drawString("Connecting to the streaming server...", 2, 60);
 
     tft.setTextColor(COLOR_GRAY_DARK);
     tft.drawString(SERVER_HOST, 160, 95);

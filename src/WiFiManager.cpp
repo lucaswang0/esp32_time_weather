@@ -97,6 +97,13 @@ const char* WiFiManager::getLocalIP() {
     return ipStr.c_str();
 }
 
+
+const char* WiFiManager::getdnsIP() {
+    static String ipStr;
+    ipStr=WiFi.dnsIP().toString();
+    return ipStr.c_str();
+}
+
 const char* WiFiManager::getSSID() {
     static String ssidStr;
     if (WiFi.status() == WL_CONNECTED) {

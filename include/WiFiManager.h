@@ -22,6 +22,7 @@ public:
     int getReconnectCount();
     int getRSSI();
     const char* getLocalIP();
+    const char* getdnsIP();
     const char* getSSID();
     bool isAPMode();
     void handleClient();
