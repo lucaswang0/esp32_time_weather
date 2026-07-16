@@ -66,5 +66,9 @@
 // BACKLIGHT_CHANNEL 在 main.cpp 中定义
 #define BACKLIGHT_DEFAULT_LEVEL 2
 
+// ==================== LEDC 配置 ====================
+#define LEDC_CHANNEL      5
+#define LEDC_BASE_FREQ    5000
+#define LEDC_TIMER_BIT    10
 
 #endif
