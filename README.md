@@ -18,7 +18,7 @@ time_weather_v2/
 │   ├── main.cpp            # 主入口，任务调度
 │   ├── PageManager.cpp     # 页面管理器
 │   ├── DisplayManager.cpp  # 显示管理器（背景、字体）
-│   ├── WiFiManager.cpp     # WiFi 连接管理（含 Web 配网 + ESP-Touch SmartConfig）
+│   ├── WiFiManager.cpp     # WiFi 连接管理（含 Web 配网 + ESP-Touch SmartConfig + SPIFFS文件管理）
 │   ├── WeatherManager.cpp  # 和风天气 API 调用
 │   ├── TimeManager.cpp     # NTP 时间同步
 │   ├── AHT20BMP280Sensor.cpp # AHT20+BMP280 传感器驱动
@@ -54,7 +54,6 @@ time_weather_v2/
 | PAGE_WIFI_INFO | WiFi信息 | 连接状态、SSID、IP、信号强度 |
 | PAGE_AP_MODE | AP配网 | 启动时WiFi连接失败自动进入，或长按10秒进入，提供WiFi配置门户（显示已保存WiFi列表），同时支持 ESP-Touch SmartConfig 蓝牙配网 |
 | PAGE_STREAMING | 屏幕流 | 接收PC端屏幕流实时显示 |
-| PAGE_WEB_SERVER | 文件管理 | 启动WebServer，SPIFFS上传/下载/删除 |
 
 ## 交互方式
 
@@ -74,7 +73,7 @@ time_weather_v2/
   - **Web 配网**: 连接 `ESP32-Weather` WiFi热点，通过浏览器访问 `192.168.4.1` 配置WiFi
   - **ESP-Touch SmartConfig**: 使用手机APP（如ESP-Touch、乐鑫官方配网工具）发送WiFi信息，无需手动连接热点
 - **屏幕流传输**: 通过TCP接收PC屏幕画面
-- **文件管理**: WebServer页面提供SPIFFS文件管理功能
+- **文件管理**: 联网后自动启动WebServer，通过浏览器访问 `http://<ESP32_IP>/fs` 进行SPIFFS文件上传/下载/删除
 
 ## 快速开始
 
@@ -144,12 +143,12 @@ python server.py
    - **ESP-Touch**: 打开ESP-Touch手机APP，输入WiFi信息即可，无需连接热点
 4. **正常使用**: 短按触摸切换页面，双击调整亮度，长按10秒进入配网模式
 5. **屏幕流**: 在PC上启动服务器，在ESP32上切换到"屏幕流"页面接收画面
-6. **文件管理**: 切换到"文件管理"页面，在浏览器访问 `http://<ESP32_IP>/fs`
+6. **文件管理**: 联网后WebServer自动启动，直接在浏览器访问 `http://<ESP32_IP>/fs`
 
 ## 注意事项
 
 - SPIFFS分区大小为0.5MB，注意不要上传太大的文件
-- WebServer只在切换到"文件管理"页面时启动，离开时自动停止
+- WebServer在联网后自动启动，无需切换页面
 - 配网模式（AP热点 + SmartConfig）在以下情况自动进入：首次启动无WiFi配置、WiFi连接失败、长按触摸键10秒以上手动触发，进入后显示10分钟倒计时
 - SmartConfig 默认超时时间为2分钟，超时后自动停止，可继续使用 Web 配网
 - 历史数据文件（`history_*.dat`）已加入.gitignore，不会被提交

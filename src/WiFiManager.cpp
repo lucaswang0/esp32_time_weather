@@ -5,6 +5,7 @@
 WiFiManager::WiFiManager() : 
     webServer(nullptr), 
     configMode(false),
+    fsServerStarted(false),
     credentialCount(0),
     scanComplete(false),
     networksFound(0),
@@ -30,6 +31,7 @@ bool WiFiManager::connect() {
         Serial.println("[WiFi] STA mode connected successfully!");
         reconnectCount = 0;
         _initialConnected = true;
+        startWebServer();
         return true;
     }
     
@@ -51,6 +53,7 @@ void WiFiManager::maintainConnection() {
             stopAPMode();
             configMode = false;
             _initialConnected = true;
+            startWebServer();
         }
         return;
     }
@@ -64,6 +67,7 @@ void WiFiManager::maintainConnection() {
         
         if (autoConnect()) {
             reconnectCount = 0;
+            startWebServer();
         } else {
             Serial.println("[WiFi] Reconnect failed, will retry later");
             startConfigPortal();
@@ -143,15 +147,21 @@ void WiFiManager::stopAPMode() {
     WiFi.softAPdisconnect(true);
     delay(100);
     
-    if (webServer) {
-        delete webServer;
-        webServer = nullptr;
-    }
+    stopWebServer();
     
     apStarted = false;
     apStartTime = 0;
     
     Serial.println("[WiFi] AP mode stopped");
+}
+
+void WiFiManager::stopWebServer() {
+    if (webServer) {
+        webServer->stop();
+        delete webServer;
+        webServer = nullptr;
+    }
+    fsServerStarted = false;
 }
 
 bool WiFiManager::isAPStarted() {
@@ -305,12 +315,31 @@ void WiFiManager::startWebServer() {
         handleForget();
     });
     
+    webServer->on("/fs", HTTP_GET, [this]() {
+        handleFS();
+    });
+    
+    webServer->on("/download", HTTP_GET, [this]() {
+        handleDownload();
+    });
+    
+    webServer->on("/upload", HTTP_POST, [this]() {
+        handleUploadEnd();
+    }, [this]() {
+        handleUpload();
+    });
+    
+    webServer->on("/delete", HTTP_GET, [this]() {
+        handleDelete();
+    });
+    
     webServer->onNotFound([this]() {
         handleNotFound();
     });
     
     webServer->begin();
-    Serial.println("[WiFi] Web server started");
+    fsServerStarted = true;
+    Serial.println("[WiFi] Web server started (with FS)");
 }
 
 void WiFiManager::handleRoot() {
@@ -708,4 +737,130 @@ void WiFiManager::handleSmartConfig() {
         Serial.println("[SmartConfig] Timeout (2 minutes), stopping SmartConfig...");
         stopSmartConfig();
     }
+}
+
+String WiFiManager::sizeStr(uint64_t bytes) {
+    if (bytes < 1024) return String(bytes) + " B";
+    if (bytes < 1024 * 1024) return String(bytes / 1024) + " KB";
+    return String(bytes / (1024 * 1024)) + " MB";
+}
+
+void WiFiManager::handleFS() {
+    String path = webServer->arg("path");
+    if (path.length() == 0) path = "/";
+    
+    String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<style>body{font-family:Arial,sans-serif;margin:10px;background:#222;color:#eee}a{color:#4af;text-decoration:none}"
+        "h2{color:#fff;border-bottom:1px solid #555}pre{background:#111;padding:8px;border-radius:4px}"
+        "input,button{padding:6px;margin:4px 0}button{background:#07c;color:#fff;border:none;border-radius:4px;cursor:pointer}"
+        ".saved{color:#0a0}.del{color:#f44;font-size:12px}</style></head><body>";
+    html += "<h2>SPIFFS: " + path + "</h2>";
+    
+    if (path != "/") {
+        String parent = path;
+        if (parent.endsWith("/")) parent = parent.substring(0, parent.length() - 1);
+        int pos = parent.lastIndexOf('/');
+        if (pos <= 0) parent = "/";
+        else parent = parent.substring(0, pos);
+        html += "<a href='/fs?path=" + parent + "'>[返回上级]</a><br>";
+    }
+    
+    fs::File dir = SPIFFS.open(path);
+    if (!dir || !dir.isDirectory()) {
+        html += "<p>不是目录</p>";
+        html += "<hr><a href='/'>Home</a></body></html>";
+        webServer->send(200, "text/html", html);
+        return;
+    }
+    
+    fs::File f;
+    while ((f = dir.openNextFile())) {
+        String name = String(f.name());
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0) name = name.substring(slash + 1);
+        if (name == ".") { f.close(); continue; }
+        
+        String fullPath = path;
+        if (fullPath != "/") fullPath += "/";
+        fullPath += name;
+        
+        if (f.isDirectory()) {
+            html += "<a href='/fs?path=" + fullPath + "'>[目录] " + name + "/</a><br>";
+        } else {
+            html += "<a href='/download?path=" + fullPath + "'>" + name + "</a> ";
+            html += "<span style='color:#888'>" + sizeStr(f.size()) + "</span> ";
+            html += "<a class='del' href='/delete?path=" + fullPath + "' onclick=\"return confirm('确定删除 " + name + "?')\">[删除]</a>";
+            html += "<br>";
+        }
+        f.close();
+    }
+    dir.close();
+    
+    html += "<hr><form action='/upload' method='post' enctype='multipart/form-data'>";
+    html += "<input type='hidden' name='path' value='" + path + "'>";
+    html += "<input type='file' name='file'><button type='submit'>上传文件</button></form>";
+    
+    html += "<hr><a href='/'>Home</a></body></html>";
+    webServer->send(200, "text/html", html);
+}
+
+void WiFiManager::handleDownload() {
+    String path = webServer->arg("path");
+    if (path.length() == 0) { webServer->send(404, "text/plain", "路径为空"); return; }
+    
+    fs::File f = SPIFFS.open(path);
+    if (!f || f.isDirectory()) { webServer->send(404, "text/plain", "文件不存在"); return; }
+    
+    String name = path;
+    int slash = name.lastIndexOf('/');
+    if (slash >= 0) name = name.substring(slash + 1);
+    
+    webServer->setContentLength(f.size());
+    webServer->send(200, "application/octet-stream", "");
+    webServer->streamFile(f, "application/octet-stream");
+    f.close();
+}
+
+void WiFiManager::handleUpload() {
+    HTTPUpload& up = webServer->upload();
+    String path = webServer->arg("path");
+    if (path.length() == 0) path = "/";
+    
+    if (up.status == UPLOAD_FILE_START) {
+        String filename = path;
+        if (filename != "/") filename += "/";
+        filename += up.filename;
+        uploadFile = SPIFFS.open(filename, "w");
+    } else if (up.status == UPLOAD_FILE_WRITE) {
+        if (uploadFile) uploadFile.write(up.buf, up.currentSize);
+    } else if (up.status == UPLOAD_FILE_END) {
+        if (uploadFile) uploadFile.close();
+    }
+}
+
+void WiFiManager::handleUploadEnd() {
+    webServer->sendHeader("Location", "/fs?path=" + webServer->arg("path"));
+    webServer->send(303);
+}
+
+void WiFiManager::handleDelete() {
+    String path = webServer->arg("path");
+    if (path.length() == 0) { webServer->send(400, "text/plain", "路径为空"); return; }
+    
+    fs::File f = SPIFFS.open(path);
+    if (!f) { webServer->send(404, "text/plain", "文件不存在"); return; }
+    bool isDir = f.isDirectory();
+    f.close();
+    
+    if (isDir) SPIFFS.rmdir(path);
+    else SPIFFS.remove(path);
+    
+    String parent = path;
+    if (parent.endsWith("/")) parent = parent.substring(0, parent.length() - 1);
+    int pos = parent.lastIndexOf('/');
+    if (pos <= 0) parent = "/";
+    else parent = parent.substring(0, pos);
+    
+    webServer->sendHeader("Location", "/fs?path=" + parent);
+    webServer->send(303);
 }

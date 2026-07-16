@@ -21,7 +21,6 @@
 #include "WiFiInfoPage.h"
 #include "APModePage.h"
 #include "StreamingPlayerPage.h"
-#include "WebServerPage.h"
 #include <driver/gpio.h>
 
 // ==================== 全局对象 ====================
@@ -45,7 +44,6 @@ HistoryPage*         pHistoryPage         = nullptr;
 WiFiInfoPage*        pWiFiInfoPage        = nullptr;
 APModePage*          pAPModePage          = nullptr;
 StreamingPlayerPage* pStreamingPlayerPage = nullptr;
-WebServerPage*       pWebServerPage       = nullptr;
 PageManager          pageManager(displayManager);
 
 // Arduino core 的 getArduinoLoopTaskStackSize() 是 weak，默认返回 8K。
@@ -259,7 +257,6 @@ void setup() {
     pAPModePage            = new APModePage(displayManager, wifiManager);
     pWiFiInfoPage          = new WiFiInfoPage(displayManager, wifiManager);
     pStreamingPlayerPage   = new StreamingPlayerPage(displayManager);
-    pWebServerPage         = new WebServerPage(displayManager, wifiManager);
     pageManager.registerPage(PageManager::PAGE_TEMP,         pTempPage);
     pageManager.registerPage(PageManager::PAGE_FORECAST,     pForecastPage);
     pageManager.registerPage(PageManager::PAGE_CALENDAR,     pCalendarPage);
@@ -268,7 +265,6 @@ void setup() {
     pageManager.registerPage(PageManager::PAGE_WIFI_INFO,    pWiFiInfoPage);
     pageManager.registerPage(PageManager::PAGE_AP_MODE,      pAPModePage);
     pageManager.registerPage(PageManager::PAGE_STREAMING,    pStreamingPlayerPage);
-    pageManager.registerPage(PageManager::PAGE_WEB_SERVER,   pWebServerPage);
     
     if (wifiManager.isAPStarted()) {
         Serial.println("[Main] Starting with AP mode page");
