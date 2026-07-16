@@ -1,5 +1,6 @@
 #include "WiFiManager.h"
 #include "config.h"
+#include "secrets.h"
 #include "esp_wifi.h"
 
 WiFiManager::WiFiManager() : 
@@ -297,6 +298,9 @@ void WiFiManager::startConfigPortal() {
 }
 
 void WiFiManager::startWebServer() {
+    if (webServer) {
+        stopWebServer();
+    }
     webServer = new WebServer(80);
     
     webServer->on("/", HTTP_GET, [this]() {

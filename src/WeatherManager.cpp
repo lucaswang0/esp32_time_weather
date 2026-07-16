@@ -6,8 +6,7 @@
 #include <string.h>
 #include "ArduinoUZlib.h"
 
-// 全局 DisplayManager 指针（保留兼容性，背景图已改为 PROGMEM 数组，无需释放）
-extern DisplayManager* g_displayManager;
+
 
 static bool sodiumInitialized = false;
 
@@ -424,8 +423,12 @@ bool WeatherManager::fetch3DayForecast() {
                             for (int i = 0; i < dailyArray.size() && i < 3; i++) {
                                 JsonObject day = dailyArray[i];
                                 forecasts[i].date = day["fxDate"].as<String>();
+                                forecasts[i].textDay = day["textDay"].as<String>();
                                 forecasts[i].tempMin = day["tempMin"].as<String>();
                                 forecasts[i].tempMax = day["tempMax"].as<String>();
+                                forecasts[i].humidity = day["humidity"].as<String>();
+                                forecasts[i].windDir = day["windDirDay"].as<String>();
+                                forecasts[i].windScale = day["windScaleDay"].as<String>();
                                 forecasts[i].sunrise = day["sunrise"].as<String>();
                                 forecasts[i].sunset = day["sunset"].as<String>();
                             }
@@ -580,27 +583,6 @@ bool WeatherManager::fetchCityInfo() {
     Serial.println("[Weather] 请求失败");
     restoreBgCacheIfNeeded();
     return false;
-}
-
-String WeatherManager::weatherToShort(String weatherEn) {
-    if (weatherEn == "sunny" || weatherEn == "clear") return "晴";
-    if (weatherEn == "cloudy") return "多云";
-    if (weatherEn == "partly-cloudy-day" || weatherEn == "partly-cloudy-night") return "多云";
-    if (weatherEn == "rainy" || weatherEn == "light-rain" || weatherEn == "moderate-rain" || weatherEn == "heavy-rain") return "雨";
-    if (weatherEn == "snowy" || weatherEn == "light-snow" || weatherEn == "heavy-snow") return "雪";
-    if (weatherEn == "thunderstorm") return "雷";
-    if (weatherEn == "fog" || weatherEn == "mist") return "雾";
-    return weatherEn;
-}
-
-String WeatherManager::getWeatherCodeFromText(String text) {
-    if (text == "晴") return "sunny";
-    if (text == "多云") return "cloudy";
-    if (text.indexOf("雨") != -1) return "rainy";
-    if (text.indexOf("雪") != -1) return "snowy";
-    if (text.indexOf("雷") != -1) return "thunderstorm";
-    if (text.indexOf("雾") != -1) return "fog";
-    return "cloudy";
 }
 
 bool WeatherManager::fetchLocationByIP() {
