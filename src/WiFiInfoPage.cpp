@@ -2,6 +2,7 @@
 #include <TFT_eSPI.h>
 #include "font_small_20.h"
 
+
 WiFiInfoPage::WiFiInfoPage(DisplayManager& display, WiFiManager& wifi)
     : _display(display), _wifi(wifi), _firstDraw(true), _lastUpdateTime(0) {
 }
@@ -39,12 +40,10 @@ void WiFiInfoPage::drawStaticContent(TFT_eSPI& tft) {
     tft.setTextDatum(TL_DATUM);
     
     tft.setTextColor(TFT_WHITE);
-    tft.drawString("网络信息", 5, 5);
-    
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString("连接状态:", 5, 30);
-    tft.drawString("WiFi名称:", 5, 55);
-    tft.drawString("IP地址:", 5, 80);
+    tft.drawString("连接状态:", 5, 5);
+    tft.drawString("WiFi名称:", 5, 30);
+    tft.drawString("IP地址:", 5, 55);
+    tft.drawString("DNS地址:", 5, 80);
     tft.drawString("信号强度:", 5, 105);
     tft.drawString("重连次数:", 5, 130);
     
@@ -61,17 +60,22 @@ void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
     bool connected = _wifi.isConnected();
     
     tft.setTextColor(connected ? TFT_GREEN : TFT_RED);
-    tft.drawString(connected ? "已连接" : "未连接", 120, 30);
+    tft.drawString(connected ? "已连接" : "未连接", 120, 5);
     
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(_wifi.getSSID(), 120, 55);
+    tft.drawString(_wifi.getSSID(), 120, 30);
     
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(_wifi.getLocalIP(), 120, 80);
+    tft.drawString(_wifi.getLocalIP(), 120, 55);
+    tft.drawString(_wifi.getdnsIP(), 120, 80);
     
     tft.setTextColor(TFT_WHITE);
     char rssiStr[16];
     snprintf(rssiStr, sizeof(rssiStr), "%d dBm", _wifi.getRSSI());
+    // 获取当前字符串的像素宽度
+    uint16_t strWidth = tft.textWidth(rssiStr);
+    // 清除该区域的旧内容（加一点边距防止边缘残留）
+    tft.fillRect(120, 105, strWidth + 5, 20, TFT_BLACK);
     tft.drawString(rssiStr, 120, 105);
     
     tft.setTextColor(TFT_WHITE);
