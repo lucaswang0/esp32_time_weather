@@ -17,9 +17,7 @@
 *.d
 *.o
 
-src/secrets.cpp
-include/config.h
-platformio.ini
+include/secrets.h
 
 .history_*.dat
 

@@ -139,15 +139,18 @@ void AHT20BMP280Sensor::update() {
     if (currentMillis - _lastUpdate >= _updateInterval) {
         _lastUpdate = currentMillis;
 
+        bool aht20Ok = false;
+        bool bmp280Ok = false;
+
         if (_aht20Connected) {
-            readAHT20();
+            aht20Ok = readAHT20();
         }
 
         if (_bmp280Connected) {
-            readBMP280();
+            bmp280Ok = readBMP280();
         }
 
-        _valid = true;
+        _valid = aht20Ok || bmp280Ok;
     }
 }
 

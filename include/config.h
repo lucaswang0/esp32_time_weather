@@ -13,10 +13,12 @@
     #define PIN_TFT_MOSI    3
     #define PIN_TFT_SCLK    4
     #define PIN_TFT_BL      5
-    #define PIN_DS18B20     -1    // 6
+    #define PIN_TOUCH       -1
+    #define PIN_BUZZER      -1
     #define PIN_LED_D4      8
     #define PIN_LED_D5      -1
-    #define PIN_TOUCH       -1
+    #define PIN_DHT11       9
+    
 
 #elif defined(BOARD_AIRM2M_CORE_ESP32C3)
     #define PIN_TFT_CS      0
@@ -25,7 +27,6 @@
     #define PIN_TFT_MOSI    3
     #define PIN_TFT_SCLK    4
     #define PIN_TFT_BL      5
-    #define PIN_DS18B20     -1    // 6
     #define PIN_TOUCH       10
     #define PIN_BUZZER      18
     #define PIN_LED_D4      12
@@ -45,8 +46,6 @@
 #define SCREEN_HEIGHT 170
 
 // ==================== WiFi配置 ====================
-#define WIFI_SSID      "YOUR_WIFI_SSID"
-#define WIFI_PASS      "YOUR_WIFI_PASSWORD"
 // WiFi 发射功率（单位 0.25 dBm）
 // 可用范围: WIFI_POWER_MIN (-20 dBm) ~ WIFI_POWER_MAX (20 dBm)
 // 44 = 11.0 dBm, 40 = 10.0 dBm, 60 = 15.0 dBm, 80 = 20.0 dBm
@@ -70,5 +69,6 @@
 #define LEDC_CHANNEL      5
 #define LEDC_BASE_FREQ    5000
 #define LEDC_TIMER_BIT    10
+
 
 #endif

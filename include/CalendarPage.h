@@ -6,9 +6,6 @@
 class DisplayManager;
 class TimeManager;
 
-/**
- * 月历页面：显示当前月份的日历
- */
 class CalendarPage : public PageBase {
 public:
     CalendarPage(DisplayManager& disp, TimeManager& time);
@@ -20,6 +17,12 @@ public:
 private:
     DisplayManager& display;
     TimeManager& time;
+    
+    int lastCalendarYear = -1;
+    int lastCalendarMonth = -1;
+    int lastCalendarDay = -1;
+    
+    void drawCalendar(int year, int month, int day);
 };
 
 #endif

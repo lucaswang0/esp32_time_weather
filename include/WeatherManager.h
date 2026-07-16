@@ -78,8 +78,6 @@ private:
     DailyForecast forecasts[3];
     
     // 辅助方法
-    String weatherToShort(String weatherEn);
-    String getWeatherCodeFromText(String weatherEn);
     String base64url_encode(const uint8_t* data, size_t len);
     bool ed25519_sign(const uint8_t* private_key, 
                       const uint8_t* message, 

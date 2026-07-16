@@ -5,10 +5,8 @@
 
 class DisplayManager;
 class WeatherManager;
+struct DailyForecast;
 
-/**
- * 3 天天气预报页面（今天 / 明天 / 后天）
- */
 class ForecastPage : public PageBase {
 public:
     ForecastPage(DisplayManager& disp, WeatherManager& weather);
@@ -20,6 +18,10 @@ public:
 private:
     DisplayManager& display;
     WeatherManager& weather;
+    
+    String lastForecastPageKey = "";
+    
+    void draw3DayForecast(const DailyForecast& day0, const DailyForecast& day1, const DailyForecast& day2);
 };
 
 #endif
