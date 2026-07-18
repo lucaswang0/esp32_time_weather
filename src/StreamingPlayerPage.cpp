@@ -3,7 +3,7 @@
 #include "DisplayManager.h"
 #include <lwip/sockets.h>
 
-#define SERVER_HOST "my-pc.local"
+#define SERVER_HOST "localpc.com"
 #define SERVER_PORT 8888
 
 StreamingPlayerPage::StreamingPlayerPage(DisplayManager& display) : _display(display) {

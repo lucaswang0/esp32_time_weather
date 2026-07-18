@@ -42,8 +42,8 @@ ForecastPage*        pForecastPage        = nullptr;
 PressurePage*        pPressurePage        = nullptr;
 HistoryPage*         pHistoryPage         = nullptr;
 WiFiInfoPage*        pWiFiInfoPage        = nullptr;
-APModePage*          pAPModePage          = nullptr;
 StreamingPlayerPage* pStreamingPlayerPage = nullptr;
+APModePage*          pAPModePage          = nullptr;
 PageManager          pageManager(displayManager);
 
 // Arduino core 的 getArduinoLoopTaskStackSize() 是 weak，默认返回 8K。
@@ -133,6 +133,9 @@ static void handleTouchEvent(TouchType type) {
     switch (type) {
         case TOUCH_SHORT: {
             Serial.println("[Touch] Short touch - next page");
+            //播放触摸反馈音（短促清脆）
+            buzzerController.touchFeedbackShort();
+
             if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                 pageManager.next();
                 pageManager.dispatchTouch(TOUCH_SHORT_BASE);
@@ -140,8 +143,35 @@ static void handleTouchEvent(TouchType type) {
             }
             break;
         }
+        case TOUCH_DOUBLE: {
+            Serial.println("[Touch] Double touch - prev page");
+            //播放触摸反馈音（双击嘀嘀）
+            buzzerController.touchFeedbackDouble();
+
+            if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                pageManager.prev();
+                pageManager.dispatchTouch(TOUCH_DOUBLE_BASE);
+                xSemaphoreGive(displayMutex);
+            }
+            break;
+        }
+        // case TOUCH_LONG: {
+        //     Serial.println("[Touch] Long touch - previous page");
+        //     //播放触摸反馈音（长促嘟——）
+        //     buzzerController.touchFeedbackLong();
+
+        //     if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        //         // pageManager.prev();
+        //         pageManager.dispatchTouch(TOUCH_LONG_BASE);
+        //         xSemaphoreGive(displayMutex);
+        //     }
+        //     break;
+        // }
         case TOUCH_VERY_LONG:
             Serial.println("[Touch] Very long touch - Enter AP mode");
+            //播放触摸反馈音（长促嘟——）
+            buzzerController.touchFeedbackLong();
+
             WiFi.disconnect(true);
             delay(100);
             wifiManager.startAPMode();
@@ -150,13 +180,7 @@ static void handleTouchEvent(TouchType type) {
                 xSemaphoreGive(displayMutex);
             }
             break;
-        case TOUCH_DOUBLE: {
-            currentBacklightLevel = (currentBacklightLevel + 1) % 4;
-            int level = BACKLIGHT_LEVELS[currentBacklightLevel];
-            setBacklightLevel(level);
-            Serial.printf("[Touch] Double click - brightness: %d\n", level);
-            break;
-        }
+
         default:
             break;
     }
@@ -216,8 +240,8 @@ void setup() {
     // 注意：不需要再 pinMode + digitalWrite，因为 ledcAttachPin 会接管引脚
     ledcDetachPin(PIN_BUZZER);
     ledcAttachPin(PIN_BUZZER, LEDC_CHANNEL);
-    ledcWrite(LEDC_CHANNEL, 0);
-    Serial.println("[Main] 蜂鸣器 PWM 重新附加，静音状态");
+    ledcWrite(LEDC_CHANNEL, (1 << LEDC_TIMER_BIT) - 1);
+    Serial.println("[Main] 蜂鸣器 PWM 重新附加，静音状态（高电平）");
 
     // AHT20+BMP280
     if (!aht20Bmp280Sensor.begin()) {
@@ -234,8 +258,6 @@ void setup() {
 
     // Buzzer
     buzzerController.begin();
-    // 播放启动自检声
-    buzzerController.startupChime();
 
     // 触摸
     touchSensor.begin();
@@ -321,6 +343,10 @@ void setup() {
         NULL,
         0
     );
+   
+    // 播放启动自检声
+    buzzerController.startupChime();
+    
 }
 
 // ==================== 时间显示任务（仅温度页面需要） ====================
@@ -401,6 +427,12 @@ void handleWiFi(unsigned long now) {
             } else if (pageManager.current() != PageManager::PAGE_AP_MODE) {
                 Serial.println("[Main] Left AP page, stopping AP and reconnecting WiFi...");
                 wifiManager.stopAPMode();
+            }
+        } else if (pageManager.current() == PageManager::PAGE_AP_MODE) {
+            Serial.println("[Main] AP mode stopped, switching back to temp page...");
+            if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                pageManager.switchTo(PageManager::PAGE_TEMP);
+                xSemaphoreGive(displayMutex);
             }
         } else if (wifiManager.isConnected()) {
             wifiManager.maintainConnection();
@@ -594,8 +626,6 @@ void handleLED(unsigned long now) {
         lastLEDConditionCheck = now;
         if (!wifiManager.isConnected()) {
             ledController.setState(LED_STATE_BLINK_FAST);
-        } else if (weatherManager.getTemperature().length() == 0) {
-            ledController.setState(LED_STATE_BLINK_ONCE);
         } else {
             ledController.setState(LED_STATE_OFF);
         }

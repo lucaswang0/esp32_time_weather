@@ -39,6 +39,7 @@ public:
     void begin(PageMode initialMode);   // 启动：进入指定初始页面
     PageMode current() const { return _current; }
     void next();                        // 切换到下一个页面
+    void prev();                        // 切换到上一个页面
     void switchTo(PageMode mode);       // 切换到指定页面
 
     void update();                      // 调用当前页 update()

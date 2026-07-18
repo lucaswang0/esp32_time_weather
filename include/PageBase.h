@@ -8,6 +8,7 @@ typedef enum {
     TOUCH_NONE_BASE = 0,
     TOUCH_SHORT_BASE,
     TOUCH_LONG_BASE,
+    TOUCH_VERY_LONG_BASE,
     TOUCH_DOUBLE_BASE
 } PageTouchType;
 

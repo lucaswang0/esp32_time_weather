@@ -159,6 +159,7 @@ void WiFiManager::stopAPMode() {
     
     apStarted = false;
     apStartTime = 0;
+    configMode = false;
     
     Serial.println("[WiFi] AP mode stopped");
 }
@@ -300,6 +301,9 @@ void WiFiManager::startConfigPortal() {
     Serial.println(WiFi.softAPIP());
     Serial.print("[WiFi] AP SSID: ");
     Serial.println(WiFi.softAPSSID());
+    
+    apStarted = true;
+    apStartTime = millis();
     
     startWebServer();
 }
