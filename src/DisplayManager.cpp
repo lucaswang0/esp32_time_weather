@@ -66,7 +66,7 @@ void DisplayManager::init() {
     drawTextWithTransparentBgFont("00", 78, 28, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("日出:00:00", 0, 110, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("日落:00:00", 0, 131, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("0000年00月00日 周X", 0, 150, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("0000.00.00 周X", 0, 150, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("-00", 285, 3, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("0000", 270, 40, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("00° - 00°", 200, 95, COLOR_WHITE, font_medium_32);
@@ -120,15 +120,15 @@ void DisplayManager::fillBlackScreen() {
     tft.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, TFT_BLACK);
 }
 
-void DisplayManager::showConnecting() {
-    tft.fillScreen(COLOR_GRAY_LIGHT);
-    tft.fillRoundRect(20, 60, 280, 50, 6, COLOR_CARD);
-    tft.loadFont(font_medium_32);
-    tft.setTextColor(COLOR_GRAY_LIGHT);
-    tft.setCursor(50, 80);
-    tft.print("正在连接WiFi...");
-    tft.unloadFont();
-}
+// void DisplayManager::showConnecting() {
+//     tft.fillScreen(COLOR_GRAY_LIGHT);
+//     tft.fillRoundRect(20, 60, 280, 50, 6, COLOR_CARD);
+//     tft.loadFont(font_medium_32);
+//     tft.setTextColor(COLOR_GRAY_LIGHT);
+//     tft.setCursor(50, 80);
+//     tft.print("正在连接WiFi...");
+//     tft.unloadFont();
+// }
 
 void DisplayManager::showConfigMode() {
     tft.fillScreen(COLOR_GRAY_LIGHT);

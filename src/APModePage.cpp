@@ -84,7 +84,7 @@ void APModePage::updateCountdown(TFT_eSPI& tft) {
 
 int APModePage::getRemainingSeconds() {
     if (!_wifi.isAPStarted()) return 0;
-    unsigned long elapsed = millis() - _apStartTime;
+    unsigned long elapsed = millis() - _wifi.getAPStartTime();
     if (elapsed >= AP_TIMEOUT_MS) return 0;
     return (AP_TIMEOUT_MS - elapsed) / 1000;
 }

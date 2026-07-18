@@ -46,6 +46,18 @@ void PageManager::next() {
     switchTo(nextMode);
 }
 
+void PageManager::prev() {
+    PageMode startMode = _current;
+    PageMode prevMode = (PageMode)((_current + PAGE_COUNT - 1) % PAGE_COUNT);
+    while ((_pages[prevMode] == nullptr || prevMode == PAGE_AP_MODE) && prevMode != startMode) {
+        prevMode = (PageMode)((prevMode + PAGE_COUNT - 1) % PAGE_COUNT);
+    }
+    if (prevMode == startMode && _pages[startMode] == nullptr) {
+        return;
+    }
+    switchTo(prevMode);
+}
+
 void PageManager::switchTo(PageMode mode) {
     if (mode >= PAGE_COUNT) return;
     if (_pages[mode] == nullptr) return;  // 跳过未注册
