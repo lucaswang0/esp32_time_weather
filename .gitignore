@@ -73,4 +73,7 @@ FileToCArray/
 logs/
 *.log
 *.tmp
-*.temp
+*.temp"tools/test_weather_python.py" 
+"tools/verify_jwt.py" 
+"tools/ed25519-public.pem" 
+"tools/ed25519-private.pem" 

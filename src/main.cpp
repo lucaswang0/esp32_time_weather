@@ -255,9 +255,11 @@ void setup() {
 
     // LED
     ledController.begin();
+    Serial.println("[Main] LED controller initialized");
 
     // Buzzer
     buzzerController.begin();
+    Serial.println("[Main] Buzzer controller initialized");
 
     // 触摸
     touchSensor.begin();
@@ -307,7 +309,8 @@ void setup() {
     pageManager.registerPage(PageManager::PAGE_STREAMING,    pStreamingPlayerPage);
     
     pageManager.begin();
-
+    Serial.println("[Main] PageManager initialized");
+    
     // 初始化传感器定时器时间戳
     lastTempRead = millis();
 
@@ -330,8 +333,6 @@ void setup() {
     // buzzerController.radioChime();
     // delay(5000);
     // Serial.println("[Main] 钟声测试完成");
-
-
 
     // 时间显示任务
     xTaskCreatePinnedToCore(

@@ -11,6 +11,45 @@
 - **LED**: 状态指示灯（WiFi未连接时快速闪烁，正常运行时关闭）
 - **蜂鸣器**: 有源蜂鸣器（低电平触发，初始化后保持高电平静音状态）
 
+## GPIO 引脚配置
+
+以下引脚配置基于 **合宙 CORE ESP32C3** 板型（`BOARD_AIRM2M_CORE_ESP32C3`），定义在 [config.h](file:///C:/Users/user/Documents/PlatformIO/Projects/esp32_time_weather/include/config.h) 和 [platformio.ini](file:///C:/Users/user/Documents/PlatformIO/Projects/esp32_time_weather/platformio.ini) 中：
+
+| GPIO 编号 | 功能 | 说明 | 方向 | 所属模块 |
+|-----------|------|------|------|----------|
+| **GPIO0** | TFT_CS | 屏幕片选信号 | OUTPUT | ST7789 TFT |
+| **GPIO1** | TFT_DC | 屏幕数据/命令选择 | OUTPUT | ST7789 TFT |
+| **GPIO2** | TFT_RST | 屏幕复位信号 | OUTPUT | ST7789 TFT |
+| **GPIO3** | TFT_MOSI | 屏幕SPI数据线 | OUTPUT | ST7789 TFT |
+| **GPIO4** | TFT_SCLK | 屏幕SPI时钟线 | OUTPUT | ST7789 TFT |
+| **GPIO5** | TFT_BL | 屏幕背光控制 | OUTPUT (LEDC) | ST7789 TFT |
+| **GPIO6** | I2C_SCL | I2C时钟线 | OUTPUT | AHT20+BMP280 |
+| **GPIO7** | I2C_SDA | I2C数据线 | IN/OUT | AHT20+BMP280 |
+| **GPIO8** | BUZZER | 蜂鸣器控制 | OUTPUT (LEDC) | 有源蜂鸣器 |
+| **GPIO10** | TOUCH | 触摸传感器输入 | INPUT_PULLUP | TTP223 |
+| **GPIO12** | LED_D4 | 状态指示灯 | OUTPUT | LED |
+| **GPIO13** | LED_D5 | 备用LED | OUTPUT | LED |
+
+### 引脚详细说明
+
+#### TFT 屏幕 (SPI)
+- **GPIO0 (TFT_CS)**: 低电平选中屏幕，高电平释放
+- **GPIO1 (TFT_DC)**: 高电平传输数据，低电平传输命令
+- **GPIO2 (TFT_RST)**: 低电平复位屏幕，初始化后保持高电平
+- **GPIO3 (TFT_MOSI)**: SPI主机输出/从机输入数据
+- **GPIO4 (TFT_SCLK)**: SPI时钟信号，最高40MHz
+- **GPIO5 (TFT_BL)**: 背光亮度控制，使用LEDC PWM调光（4档亮度）
+
+#### I2C 传感器
+- **GPIO6 (I2C_SCL)**: I2C时钟线，标准400kHz速率
+- **GPIO7 (I2C_SDA)**: I2C数据线，双向传输
+
+#### 其他外设
+- **GPIO8 (BUZZER)**: 蜂鸣器控制，低电平触发发声，使用LEDC产生音调
+- **GPIO10 (TOUCH)**: 电容触摸传感器，上拉输入，触摸时为低电平
+- **GPIO12 (LED_D4)**: 主状态指示灯，WiFi未连接时快速闪烁
+- **GPIO13 (LED_D5)**: 备用LED，当前未使用
+
 ## 项目结构
 
 ```
