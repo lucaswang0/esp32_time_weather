@@ -4,8 +4,9 @@
 #include "ForecastPage.h"
 #include "PressurePage.h"
 #include "HistoryPage.h"
+#include "FlipClockPage.h"
 
-static const char* PAGE_NAMES[] = {"温度", "3天预报",  "月历","气压", "历史", "网络信息", "AP配网", "流媒体", "文件管理"};
+static const char* PAGE_NAMES[] = {"温度", "3天预报",  "月历","气压", "历史", "网络信息", "AP配网", "流媒体", "翻页时钟"};
 
 PageManager::PageManager(DisplayManager& disp)
     : _display(disp) {

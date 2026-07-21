@@ -21,6 +21,7 @@
 #include "WiFiInfoPage.h"
 #include "APModePage.h"
 #include "StreamingPlayerPage.h"
+#include "FlipClockPage.h"
 #include <driver/gpio.h>
 
 // ==================== 全局对象 ====================
@@ -44,6 +45,7 @@ HistoryPage*         pHistoryPage         = nullptr;
 WiFiInfoPage*        pWiFiInfoPage        = nullptr;
 StreamingPlayerPage* pStreamingPlayerPage = nullptr;
 APModePage*          pAPModePage          = nullptr;
+FlipClockPage*       pFlipClockPage       = nullptr;
 PageManager          pageManager(displayManager);
 
 // Arduino core 的 getArduinoLoopTaskStackSize() 是 weak，默认返回 8K。
@@ -297,6 +299,7 @@ void setup() {
     pAPModePage            = new APModePage(displayManager, wifiManager);
     pWiFiInfoPage          = new WiFiInfoPage(displayManager, wifiManager);
     pStreamingPlayerPage   = new StreamingPlayerPage(displayManager);
+    pFlipClockPage         = new FlipClockPage(displayManager);
     pageManager.registerPage(PageManager::PAGE_TEMP,         pTempPage);
     pageManager.registerPage(PageManager::PAGE_FORECAST,     pForecastPage);
     pageManager.registerPage(PageManager::PAGE_CALENDAR,     pCalendarPage);
@@ -305,6 +308,7 @@ void setup() {
     pageManager.registerPage(PageManager::PAGE_WIFI_INFO,    pWiFiInfoPage);
     pageManager.registerPage(PageManager::PAGE_AP_MODE,      pAPModePage);
     pageManager.registerPage(PageManager::PAGE_STREAMING,    pStreamingPlayerPage);
+    pageManager.registerPage(PageManager::PAGE_FLIP_CLOCK,   pFlipClockPage);
     
     pageManager.begin();
 
