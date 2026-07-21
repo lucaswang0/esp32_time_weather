@@ -12,10 +12,7 @@ class PressurePage;
 class APModePage;
 class WiFiInfoPage;
 class StreamingPlayerPage;
-<<<<<<< HEAD
 class FlipClockPage;
-=======
->>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
 
 /**
  * 页面切换负责控制哪个页面显示。
@@ -32,10 +29,7 @@ public:
         PAGE_WIFI_INFO,  // 新增：网络信息页面
         PAGE_AP_MODE,
         PAGE_STREAMING,  // 新增：流媒体播放器页面
-<<<<<<< HEAD
         PAGE_FLIP_CLOCK, // 新增：翻页时钟页面
-=======
->>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
         PAGE_COUNT
     };
 

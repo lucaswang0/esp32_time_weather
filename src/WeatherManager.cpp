@@ -635,40 +635,25 @@ bool WeatherManager::fetchLocationByIP() {
                       province.c_str(), cityName.c_str(), 
                       lat.toFloat(), lon.toFloat());
         
-<<<<<<< HEAD
         if (lat.length() == 0 || lon.length() == 0) {
             Serial.println("[Weather] 未获取到经纬度");
             http.end();
             return false;
         }
 
-=======
-        if (cityName.length() == 0) {
-            Serial.println("[Weather] 未获取到城市名称");
-            http.end();
-            return false;
-        }
-        
->>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
         String token = generateJWT();
         if (token == "") {
             Serial.println("[Weather] JWT生成失败");
             http.end();
             return false;
         }
-<<<<<<< HEAD
 
         // QWeather 地理查询：location 接受 "lon,lat"（逗号需 URL 编码为 %2C）
         String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + lon + "%2C" + lat;
-=======
-        
-        String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + cityName;
->>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
         Serial.println("[Weather] 和风天气地理查询: " + geoUrl);
         
         WiFiClientSecure geoClient;
         HTTPClient https;
-<<<<<<< HEAD
 
         geoClient.setInsecure();
         https.begin(geoClient, geoUrl);
@@ -760,48 +745,6 @@ bool WeatherManager::fetchLocationByIP() {
                 Serial.printf("[Weather] 地理查询响应大小异常: %d\n", len);
                 https.end();
             }
-=======
-        
-        geoClient.setInsecure();
-        https.begin(geoClient, geoUrl);
-        https.addHeader("Authorization", "Bearer " + token);
-        https.addHeader("User-Agent", "ESP32-Weather");
-        
-        int geoCode = https.GET();
-        
-        if (geoCode == HTTP_CODE_OK) {
-            String geoPayload = https.getString();
-            
-            doc1024.clear();
-            DeserializationError geoError = deserializeJson(doc1024, geoPayload);
-            
-            if (geoError) {
-                Serial.print("[Weather] 地理查询JSON解析失败: ");
-                Serial.println(geoError.c_str());
-                https.end();
-                http.end();
-                return false;
-            }
-            
-            const char* geoCodeStr = doc1024["code"];
-            if (geoCodeStr != NULL && strcmp(geoCodeStr, "200") == 0) {
-                JsonArray locationArray = doc1024["location"];
-                if (locationArray.size() > 0) {
-                    JsonObject location = locationArray[0];
-                    locationId = location["id"].as<String>();
-                    city = location["name"].as<String>();
-                    
-                    Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n", 
-                                  locationId.c_str(), city.c_str());
-                    
-                    https.end();
-                    http.end();
-                    return true;
-                }
-            }
-            Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
-            https.end();
->>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
         } else {
             Serial.printf("[Weather] 地理查询失败: %d\n", geoCode);
             https.end();

@@ -4,12 +4,10 @@
 #include "PageBase.h"
 #include "DisplayManager.h"
 #include "digitals.h"
-#include <TFT_eSPI.h>
 
 class FlipClockPage : public PageBase {
 public:
     FlipClockPage(DisplayManager& display);
-    ~FlipClockPage();
     
     void onEnter() override;
     void onExit() override;
@@ -18,9 +16,6 @@ public:
 
 private:
     DisplayManager& _display;
-    TFT_eSprite* _sprite;
-    int16_t _sprite_x, _sprite_y;
-    bool _sprite_ok;
     
     static const int CW = 32;
     static const int CH = 48;
@@ -33,6 +28,7 @@ private:
     static const int ANIM_HALF = 10;
     
     static const uint16_t BG_COLOR = 0x3333;
+    static const uint16_t CARD_BG = 0x0841;
     static const uint16_t COLON_CLR = 0x8C51;
     
     int16_t digit_x[6];
@@ -65,11 +61,11 @@ private:
     void calc_layout();
     void build_flip_table();
     void init_time();
-    void sync_time();
-    void render_frame();
-    void render_card(uint16_t* buf, int idx);
-    void render_trapezoid(int cx, const uint16_t *src, const StripEntry *strips);
-    void render_colon(uint16_t* buf, int idx);
+    void advance(int idx);
+    void blit_half(const uint16_t *src, int cx, int cy);
+    void draw_trapezoid(const uint16_t *src, const StripEntry *strips, int cx);
+    void render_card(int idx);
+    void render_colon(int cx);
 };
 
 #endif
