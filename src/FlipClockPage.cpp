@@ -216,6 +216,38 @@ void FlipClockPage::sync_time() {
     }
 }
 
+void FlipClockPage::push_scaled(int dst_x, int dst_y, int src_w, int src_h, int dst_w, int dst_h, const uint16_t *src, int src_pitch) {
+    if (!_sprite_ok) return;
+    
+    int sp_w = _sprite->width();
+    uint16_t* buf = (uint16_t*)_sprite->getPointer();
+    int max_x = dst_w - 1;
+    int max_y = dst_h - 1;
+    
+    for (int sy = 0; sy < src_h; sy++) {
+        int dy0 = dst_y + sy * max_y / (src_h - 1);
+        int dy1 = dst_y + (sy + 1) * max_y / (src_h - 1);
+        if (dy0 == dy1) dy1 = dy0 + 1;
+        
+        for (int sx = 0; sx < src_w; sx++) {
+            uint16_t pixel = (src[sy * src_pitch + sx] >> 8) | (src[sy * src_pitch + sx] << 8);
+            
+            int dx0 = dst_x + sx * max_x / (src_w - 1);
+            int dx1 = dst_x + (sx + 1) * max_x / (src_w - 1);
+            if (dx0 == dx1) dx1 = dx0 + 1;
+            
+            for (int dy = dy0; dy < dy1; dy++) {
+                if (dy < 0 || dy >= CH) continue;
+                for (int dx = dx0; dx < dx1; dx++) {
+                    if (dx >= 0 && dx < sp_w) {
+                        buf[dy * sp_w + dx] = pixel;
+                    }
+                }
+            }
+        }
+    }
+}
+
 void FlipClockPage::render_card(int idx) {
     Digit &d = digits[idx];
     int cx = _sprite_ok ? (digit_x[idx] - _sprite_x) : digit_x[idx];
@@ -224,12 +256,12 @@ void FlipClockPage::render_card(int idx) {
     
     if (d.anim_frame < 0 || d.anim_frame >= TOTAL_FRAMES) {
         if (_sprite_ok) {
-            _sprite->pushImage(cx, 0, CW, HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
-            _sprite->pushImage(cx, HALF, CW, HALF, (uint16_t*)DIGIT_LOWER[d.cur]);
+            push_scaled(cx, 0,     SRC_W, SRC_HALF, CW, HALF, (uint16_t*)DIGIT_UPPER[d.cur], SRC_W);
+            push_scaled(cx, HALF,   SRC_W, SRC_HALF, CW, HALF, (uint16_t*)DIGIT_LOWER[d.cur], SRC_W);
         } else {
             auto& tft = _display.getTFT();
-            tft.pushImage(scr_cx, scr_cy, CW, HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
-            tft.pushImage(scr_cx, scr_cy + HALF, CW, HALF, (uint16_t*)DIGIT_LOWER[d.cur]);
+            tft.pushImage(scr_cx, scr_cy, SRC_W, SRC_HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
+            tft.pushImage(scr_cx, scr_cy + SRC_HALF, SRC_W, SRC_HALF, (uint16_t*)DIGIT_LOWER[d.cur]);
         }
         
         if (d.anim_frame >= TOTAL_FRAMES) {
@@ -239,8 +271,8 @@ void FlipClockPage::render_card(int idx) {
     }
     
     if (_sprite_ok) {
-        _sprite->pushImage(cx, 0, CW, HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
-        _sprite->pushImage(cx, HALF, CW, HALF, (uint16_t*)DIGIT_LOWER[d.old]);
+        push_scaled(cx, 0,     SRC_W, SRC_HALF, CW, HALF, (uint16_t*)DIGIT_UPPER[d.cur], SRC_W);
+        push_scaled(cx, HALF,   SRC_W, SRC_HALF, CW, HALF, (uint16_t*)DIGIT_LOWER[d.old], SRC_W);
         
         if (d.anim_frame < ANIM_HALF) {
             render_trapezoid(cx, DIGIT_UPPER[d.old], flip_table[d.anim_frame].upper);
@@ -249,20 +281,27 @@ void FlipClockPage::render_card(int idx) {
         }
     } else {
         auto& tft = _display.getTFT();
-        tft.pushImage(scr_cx, scr_cy, CW, HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
-        tft.pushImage(scr_cx, scr_cy + HALF, CW, HALF, (uint16_t*)DIGIT_LOWER[d.old]);
+        tft.pushImage(scr_cx, scr_cy, SRC_W, SRC_HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
+        tft.pushImage(scr_cx, scr_cy + SRC_HALF, SRC_W, SRC_HALF, (uint16_t*)DIGIT_LOWER[d.old]);
     }
 }
 
 void FlipClockPage::render_trapezoid(int cx, const uint16_t *src, const StripEntry *strips) {
     if (!_sprite_ok) return;
     
+    int sp_w = _sprite->width();
+    uint16_t* buf = (uint16_t*)_sprite->getPointer();
+    int max_x = CW - 1;
+    
     for (int i = 0; i < N_STRIPS; i++) {
         int dy_top = HALF + strips[i].dy_top;
         int dy_bot = HALF + strips[i].dy_bot;
         int dst_h = dy_bot - dy_top;
         
-        if (dst_h < 1) continue;
+        if (dst_h < 1) {
+            dy_bot = dy_top + 1;
+            dst_h = 1;
+        }
         
         int mid = dst_h >> 1;
         int ext = strips[i].ext;
@@ -273,15 +312,38 @@ void FlipClockPage::render_trapezoid(int cx, const uint16_t *src, const StripEnt
             if (dst_row < 0 || dst_row >= CH) continue;
             
             int src_row = 2 * i + ((y < mid) ? 0 : 1);
-            uint16_t line[CW];
-            for (int x = 0; x < CW; x++) {
-                line[x] = src[src_row * CW + x];
-            }
-            _sprite->pushImage(cx, dst_row, CW, 1, line);
             
-            for (int e = 0; e < ext; e++) {
-                if (cx + CW + e < _sprite->width()) {
-                    _sprite->drawPixel(cx + CW + e, dst_row, BG_COLOR);
+            for (int x = 0; x < SRC_W; x++) {
+                uint16_t raw = src[src_row * SRC_W + x];
+                uint16_t pixel = (raw >> 8) | (raw << 8);
+                int dx0 = cx + x * max_x / (SRC_W - 1);
+                int dx1 = cx + (x + 1) * max_x / (SRC_W - 1);
+                if (dx0 == dx1) dx1 = dx0 + 1;
+                
+                int dy0 = dst_row;
+                int dy1 = dst_row + 1;
+                if (dy0 == dy1) dy1 = dy0 + 1;
+                
+                for (int dy = dy0; dy < dy1; dy++) {
+                    if (dy < 0 || dy >= CH) continue;
+                    for (int dx = dx0; dx < dx1; dx++) {
+                        if (dx >= 0 && dx < sp_w) {
+                            buf[dy * sp_w + dx] = pixel;
+                        }
+                    }
+                }
+            }
+            
+            int ext_dx_start = cx + CW;
+            int ext_dx_end = ext_dx_start + (ext * (CW - 1)) / (SRC_W - 1);
+            for (int dx = ext_dx_start; dx < ext_dx_end && dx < sp_w; dx++) {
+                int dy0 = dst_row;
+                int dy1 = dst_row + 1;
+                if (dy0 == dy1) dy1 = dy0 + 1;
+                for (int dy = dy0; dy < dy1; dy++) {
+                    if (dy >= 0 && dy < CH) {
+                        buf[dy * sp_w + dx] = (BG_COLOR >> 8) | (BG_COLOR << 8);
+                    }
                 }
             }
         }
@@ -294,26 +356,36 @@ void FlipClockPage::render_colon(int idx) {
     int scr_cy = (SCREEN_HEIGHT - CH) / 2;
     int y1 = CH * 3 / 10;
     int y2 = CH * 7 / 10;
+    int r = 3;
     
     if (_sprite_ok) {
-        for (int dy = -2; dy <= 2; dy++) {
-            for (int dx = -2; dx <= 2; dx++) {
-                if (dx * dx + dy * dy > 5) continue;
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                if (dx * dx + dy * dy > r * r + 1) continue;
                 
-                if (y1 + dy >= 0 && y1 + dy < CH) {
-                    _sprite->drawPixel(cx + dx, y1 + dy, COLON_CLR);
-                }
-                if (y2 + dy >= 0 && y2 + dy < CH) {
-                    _sprite->drawPixel(cx + dx, y2 + dy, COLON_CLR);
+                int px = cx + dx * (CW - 1) / (SRC_W - 1);
+                int py1 = y1 + dy * (CH - 1) / (HALF - 1);
+                int py2 = y2 + dy * (CH - 1) / (HALF - 1);
+                
+                for (int oy = -1; oy <= 1; oy++) {
+                    for (int ox = -1; ox <= 1; ox++) {
+                        int fx = px + ox;
+                        int fy1 = py1 + oy;
+                        int fy2 = py2 + oy;
+                        if (fx >= 0 && fx < _sprite->width()) {
+                            if (fy1 >= 0 && fy1 < CH) _sprite->drawPixel(fx, fy1, COLON_CLR);
+                            if (fy2 >= 0 && fy2 < CH) _sprite->drawPixel(fx, fy2, COLON_CLR);
+                        }
+                    }
                 }
             }
         }
     } else {
         auto& tft = _display.getTFT();
         
-        for (int dy = -2; dy <= 2; dy++) {
-            for (int dx = -2; dx <= 2; dx++) {
-                if (dx * dx + dy * dy > 5) continue;
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                if (dx * dx + dy * dy > r * r + 1) continue;
                 
                 if (scr_cy + y1 + dy >= 0 && scr_cy + y1 + dy < SCREEN_HEIGHT) {
                     tft.drawPixel(scr_cx + dx, scr_cy + y1 + dy, COLON_CLR);

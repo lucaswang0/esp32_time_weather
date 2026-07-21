@@ -22,10 +22,12 @@ private:
     int16_t _sprite_x, _sprite_y;
     bool _sprite_ok;
     
-    static const int CW = 32;
-    static const int CH = 48;
-    static const int HALF = 24;
-    static const int GAP = 4;
+    static const int SRC_W = 32;     // Source bitmap width (from digitals.h)
+    static const int SRC_HALF = 24;  // Source half height
+    static const int CW = 48;       // 1.5x display scale
+    static const int CH = 72;       // 1.5x display scale
+    static const int HALF = 36;     // 1.5x display scale
+    static const int GAP = 2;
     static const int COLON_W = 8;
     static const int N_STRIPS = 12;
     static const int FPS = 20;
@@ -70,6 +72,7 @@ private:
     void render_card(int idx);
     void render_trapezoid(int cx, const uint16_t *src, const StripEntry *strips);
     void render_colon(int idx);
+    void push_scaled(int dst_x, int dst_y, int src_w, int src_h, int dst_w, int dst_h, const uint16_t *src, int src_pitch);
 };
 
 #endif
