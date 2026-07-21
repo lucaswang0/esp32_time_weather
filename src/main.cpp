@@ -21,7 +21,10 @@
 #include "WiFiInfoPage.h"
 #include "APModePage.h"
 #include "StreamingPlayerPage.h"
+<<<<<<< HEAD
 #include "FlipClockPage.h"
+=======
+>>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
 #include <driver/gpio.h>
 
 // ==================== 全局对象 ====================
@@ -45,7 +48,10 @@ HistoryPage*         pHistoryPage         = nullptr;
 WiFiInfoPage*        pWiFiInfoPage        = nullptr;
 StreamingPlayerPage* pStreamingPlayerPage = nullptr;
 APModePage*          pAPModePage          = nullptr;
+<<<<<<< HEAD
 FlipClockPage*       pFlipClockPage       = nullptr;
+=======
+>>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
 PageManager          pageManager(displayManager);
 
 // Arduino core 的 getArduinoLoopTaskStackSize() 是 weak，默认返回 8K。
@@ -257,9 +263,17 @@ void setup() {
 
     // LED
     ledController.begin();
+<<<<<<< HEAD
 
     // Buzzer
     buzzerController.begin();
+=======
+    Serial.println("[Main] LED controller initialized");
+
+    // Buzzer
+    buzzerController.begin();
+    Serial.println("[Main] Buzzer controller initialized");
+>>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
 
     // 触摸
     touchSensor.begin();
@@ -299,7 +313,10 @@ void setup() {
     pAPModePage            = new APModePage(displayManager, wifiManager);
     pWiFiInfoPage          = new WiFiInfoPage(displayManager, wifiManager);
     pStreamingPlayerPage   = new StreamingPlayerPage(displayManager);
+<<<<<<< HEAD
     pFlipClockPage         = new FlipClockPage(displayManager);
+=======
+>>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
     pageManager.registerPage(PageManager::PAGE_TEMP,         pTempPage);
     pageManager.registerPage(PageManager::PAGE_FORECAST,     pForecastPage);
     pageManager.registerPage(PageManager::PAGE_CALENDAR,     pCalendarPage);
@@ -308,10 +325,17 @@ void setup() {
     pageManager.registerPage(PageManager::PAGE_WIFI_INFO,    pWiFiInfoPage);
     pageManager.registerPage(PageManager::PAGE_AP_MODE,      pAPModePage);
     pageManager.registerPage(PageManager::PAGE_STREAMING,    pStreamingPlayerPage);
+<<<<<<< HEAD
     pageManager.registerPage(PageManager::PAGE_FLIP_CLOCK,   pFlipClockPage);
     
     pageManager.begin();
 
+=======
+    
+    pageManager.begin();
+    Serial.println("[Main] PageManager initialized");
+    
+>>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
     // 初始化传感器定时器时间戳
     lastTempRead = millis();
 
@@ -335,8 +359,11 @@ void setup() {
     // delay(5000);
     // Serial.println("[Main] 钟声测试完成");
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
     // 时间显示任务
     xTaskCreatePinnedToCore(
         TaskTimeDisplay,

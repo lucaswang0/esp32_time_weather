@@ -1,0 +1,37 @@
+default_pipeline_settings:
+  # === 网络与性能设置 ===
+  generator_target_interval_sec: 0.03  # 帧生成间隔，0.033 = ~30 FPS
+  max_chunk_data_size: 8192             # 每块最大数据字节数，需匹配ESP32缓冲区
+  socket_timeout: 1.0                   # 套接字超时时间（秒）
+
+  # === 图像质量设置 ===
+  gamma: 1.2                            # 伽马校正值，>1.0画面更亮
+  wb_scale: [1.1, 1.05, 0.95]           # 白平衡缩放 [R, G, B]
+
+  # === 帧率与阈值自适应 ===
+  target_fps: 24.0                      # 目标帧率
+  min_dirty_rect_threshold: 1           # 最小脏矩形检测阈值（越小越灵敏）
+  max_dirty_rect_threshold: 180         # 最大脏矩形检测阈值
+  threshold_adjustment_step_up: 15       # 阈值上调步长（帧率不足时）
+  threshold_adjustment_step_down: 5     # 阈值下调步长（帧率有余时）
+  fps_history_size: 3                   # FPS计算历史长度
+  fps_hysteresis_factor: 0.03           # 帧率滞后因子（避免频繁调整）
+
+  # === 队列设置 ===
+  frames_queue_max_size: 8              # 帧队列最大容量
+  generator_low_water_mark: 3           # 队列低水位标记（低于此值开始生成）
+
+  # === 心跳保活（窗口静止时保持连接） ===
+  heartbeat_interval_sec: 2.0           # 心跳包发送间隔（秒）
+
+
+# === 管道配置列表 ===
+pipelines:
+  - name: "WindowCap_Dashboard_ESP32"
+    esp32_port: 8888                    # ESP32连接端口
+    target_width: 320                   # 目标屏幕宽度（像素）
+    target_height: 170                  # 目标屏幕高度（像素）
+    image_source_mode: "WINDOW_CAPTURE" # 图像源模式：WINDOW_CAPTURE（窗口捕获）或 SCREEN_CAPTURE（屏幕捕获）
+    window_title: "无标题 - 记事本" # 要捕获的窗口标题
+    #crop_alignment: "left"             # 裁剪对齐方式：left/center/right
+    #capture_region: {top: 0, left: 0, width: 320, height: 240, mon: 1} # SCREEN_CAPTURE模式时的捕获区域
