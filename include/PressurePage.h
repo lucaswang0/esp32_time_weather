@@ -23,8 +23,8 @@ public:
     int getLastRecordCount() const { return lastRecordCount; }
 
 private:
-    DisplayManager& display;
-    AHT20BMP280Sensor& aht20;
+    DisplayManager& _display;
+    AHT20BMP280Sensor& _aht20;
 
     // 缓存，避免不必要的重绘
     float lastPressure;

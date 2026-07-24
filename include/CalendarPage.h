@@ -15,8 +15,8 @@ public:
     void update() override;
 
 private:
-    DisplayManager& display;
-    TimeManager& time;
+    DisplayManager& _display;
+    TimeManager& _time;
     
     int lastCalendarYear = -1;
     int lastCalendarMonth = -1;

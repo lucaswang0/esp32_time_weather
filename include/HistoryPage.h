@@ -26,8 +26,8 @@ public:
     void addRecord(float temp, float humidity, float pressure);
     
 private:
-    DisplayManager& display;
-    AHT20BMP280Sensor& aht20;
+    DisplayManager& _display;
+    AHT20BMP280Sensor& _aht20;
     
     WeatherRecord history[MAX_HISTORY_BUFFER];
     int historyCount;

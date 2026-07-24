@@ -22,10 +22,10 @@ public:
     void updateTime(int year, int month, int day, int hour, int minute, int second, int weekday);
 
 private:
-    DisplayManager& display;
-    WeatherManager& weather;
-    AHT20BMP280Sensor& aht20;
-    WiFiManager& wifi;
+    DisplayManager& _display;
+    WeatherManager& _weather;
+    AHT20BMP280Sensor& _aht20;
+    WiFiManager& _wifi;
     
     int lastHour = -1;
     int lastMinute = -1;

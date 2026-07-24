@@ -3,20 +3,20 @@
 #include "TimeManager.h"
 
 CalendarPage::CalendarPage(DisplayManager& disp, TimeManager& time)
-    : display(disp), time(time) {}
+    : _display(disp), _time(time) {}
 
 void CalendarPage::onEnter() {
     Serial.println("[CalendarPage] onEnter");
-    display.clearScreen();
+    _display.clearScreen();
     lastCalendarYear = -1;
     lastCalendarMonth = -1;
     lastCalendarDay = -1;
 }
 
 void CalendarPage::update() {
-    int year = time.getYear();
-    int month = time.getMonth();
-    int day = time.getDay();
+    int year = _time.getYear();
+    int month = _time.getMonth();
+    int day = _time.getDay();
     
     if (year == lastCalendarYear && month == lastCalendarMonth && day == lastCalendarDay) {
         return;
@@ -29,7 +29,7 @@ void CalendarPage::update() {
 }
 
 void CalendarPage::drawCalendar(int year, int month, int day) {
-    TFT_eSPI& tft = display.getTFT();
+    TFT_eSPI& tft = _display.getTFT();
     
     int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     

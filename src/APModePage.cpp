@@ -51,12 +51,15 @@ void APModePage::drawStaticContent(TFT_eSPI& tft) {
     tft.drawString("2. 浏览器访问:", 5, 56);
     
     tft.setTextColor(TFT_CYAN);
-    tft.drawString("   http://192.168.4.1", 5, 80);
+    tft.drawString("http://192.168.4.1", 5 + tft.textWidth("2. 浏览器访问:"), 56);
     
     tft.setTextColor(TFT_WHITE);
-    tft.drawString("3. 选择WiFi并输入密码", 5, 104);
-    tft.drawString("4. 保存后设备将重启", 5, 128);
+    tft.drawString("3. 选择WiFi并输入密码", 5, 80);
+    tft.drawString("4. 保存后设备将重启", 5, 104);
     
+    tft.setTextColor(TFT_CYAN);
+    tft.drawString("也使用EspTouch工具配置", 5, 128);
+
     tft.setTextColor(TFT_ORANGE);
     tft.drawString("未配置则倒计时结束后返回", 5, 152);
     

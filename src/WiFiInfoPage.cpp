@@ -1,6 +1,7 @@
 #include "WiFiInfoPage.h"
 #include <TFT_eSPI.h>
 #include "font_small_20.h"
+#include "DisplayManager.h"
 
 
 WiFiInfoPage::WiFiInfoPage(DisplayManager& display, WiFiManager& wifi)
@@ -47,7 +48,7 @@ void WiFiInfoPage::drawStaticContent(TFT_eSPI& tft) {
     tft.drawString("信号强度:", 5, 105);
     tft.drawString("重连次数:", 5, 130);
     
-    tft.setTextColor(TFT_DARKGREY);
+    tft.setTextColor(COLOR_GOLD_WARM);
     tft.drawString("长按10秒进入AP配网", 5, 155);
     
     tft.unloadFont();
@@ -75,9 +76,13 @@ void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
     // 获取当前字符串的像素宽度
     uint16_t strWidth = tft.textWidth(rssiStr);
     // 清除该区域的旧内容（加一点边距防止边缘残留）
-    tft.fillRect(120, 105, strWidth + 5, 20, TFT_BLACK);
-    tft.drawString(rssiStr, 120, 105);
-    
+    // tft.fillRect(120, 105, strWidth + 5, 20, TFT_BLACK);
+    // tft.drawString(rssiStr, 120, 105);
+    tft.unloadFont();
+
+    _display.drawTextWithTransparentBgFont(rssiStr, 120, 105, TFT_WHITE, font_small_20);
+
+    tft.loadFont(font_small_20);
     tft.setTextColor(TFT_WHITE);
     char reconnectStr[16];
     snprintf(reconnectStr, sizeof(reconnectStr), "%d", _wifi.getReconnectCount());

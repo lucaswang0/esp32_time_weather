@@ -16,7 +16,7 @@
 #define COLOR_TEXT        0xFFFF  // 白字（前向替代 TFT_BLACK）
 
 HistoryPage::HistoryPage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
-    : display(disp), aht20(aht20), historyCount(0) {
+    : _display(disp), _aht20(aht20), historyCount(0) {
     // 构造期不调用 loadFromSPIFFS()，SPIFFS 尚未挂载且会占用大栈临时数组
     // 数据加载延后到 onEnter() 中执行
 }
@@ -24,17 +24,11 @@ HistoryPage::HistoryPage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
 void HistoryPage::onEnter() {
     Serial.println("[HistoryPage] onEnter");
     loadFromSPIFFS();
-    Serial.println("[HistoryPage] draw step 1");
-    TFT_eSPI& tft = display.getTFT();
-    tft.endWrite();
-    tft.fillRect(0, 0, 320, 170, COLOR_BG_HISTORY);
-    Serial.println("[HistoryPage] draw step 2");
+    // 加载背景图（DisplayManager 内部从 PROGMEM bg2-bg9 选择并加载）
+    _display.clearScreen();
     drawStatusBar();
-    Serial.println("[HistoryPage] draw step 3");
     drawWeatherGraph();
-    Serial.println("[HistoryPage] draw step 4");
     drawBottomBar();
-    Serial.println("[HistoryPage] draw done");
 }
 
 void HistoryPage::update() {
@@ -205,43 +199,50 @@ void HistoryPage::loadFromSPIFFS() {
 }
 
 void HistoryPage::drawStatusBar() {
-    TFT_eSPI& tft = display.getTFT();
-    // 中灰背景
-    tft.fillRect(0, 0, 320, 25, COLOR_BG_HISTORY);
-    tft.setTextColor(COLOR_TEXT);
-    tft.setTextSize(1);
+    TFT_eSPI& tft = _display.getTFT();
+    // 背景图透出，不再 fillRect 覆盖整条状态栏
+    // 避免 tft.printf：其内部走 vprintf/vsnprintf 在某些 GCC 实现中栈用量 >2K，
+    // 与 GCC -fstack-protector 配合易 spurious 检测到 canary 损坏。
+    static char numBuf[8];
 
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
     char time_str[32];
-    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
-    tft.setCursor(5, 10);
-    tft.println(time_str);
+    strftime(time_str, sizeof(time_str), "%Y/%m/%d %H:%M:%S", tm_info);
+    // 时间字符串：透明背景绘制
+    _display.drawTextWithTransparentBg(time_str, 5, 10, COLOR_TEXT);
 
     if (historyCount > 0) {
         int last = historyCount - 1;
-        // 避免 tft.printf：其内部走 vprintf/vsnprintf 在某些 GCC 实现中栈用量 >2K，
-        // 与 GCC -fstack-protector 配合易 spurious 检测到 canary 损坏。
-        static char numBuf[8];
-        tft.setCursor(155, 10);
-        tft.setTextColor(COLOR_TEMP);
-        tft.setTextSize(1);
-        tft.print("T:");
-        tft.print(dtostrf(history[last].temperature, 4, 1, numBuf));
-        tft.print("C ");
-        tft.setTextColor(COLOR_HUMI);
-        tft.print("H:");
-        tft.print(dtostrf(history[last].humidity, 4, 1, numBuf));
-        tft.print("% ");
-        tft.setTextColor(COLOR_PRESS);
-        tft.print("P:");
-        tft.print(dtostrf(history[last].pressure, 5, 1, numBuf));
-        tft.print("hPa");
+        char tBuf[16], hBuf[16], pBuf[16];
+
+        // 预格式化三段彩色文本
+        dtostrf(history[last].temperature, 4, 1, numBuf);
+        sprintf(tBuf, "T:%sC ", numBuf);
+        dtostrf(history[last].humidity, 4, 1, numBuf);
+        sprintf(hBuf, "H:%s%% ", numBuf);
+        dtostrf(history[last].pressure, 5, 1, numBuf);
+        sprintf(pBuf, "P:%shPa", numBuf);
+
+        // 测量各段宽度以便按段拼接（默认 font_small_20）
+        tft.loadFont(font_small_20);
+        int tW = tft.textWidth(tBuf);
+        int hW = tft.textWidth(hBuf);
+        int pW = tft.textWidth(pBuf);
+        tft.unloadFont();
+
+        // 透明背景分段绘制
+        int x = 155;
+        _display.drawTextWithTransparentBg(tBuf, x, 10, COLOR_TEMP);
+        x += tW;
+        _display.drawTextWithTransparentBg(hBuf, x, 10, COLOR_HUMI);
+        x += hW;
+        _display.drawTextWithTransparentBg(pBuf, x, 10, COLOR_PRESS);
     }
 }
 
 void HistoryPage::drawWeatherGraph() {
-    TFT_eSPI& tft = display.getTFT();
+    TFT_eSPI& tft = _display.getTFT();
     tft.endWrite();
 
     int graph_x = 10;
@@ -249,13 +250,13 @@ void HistoryPage::drawWeatherGraph() {
     int graph_w = 300;
     int graph_h = 110;
 
-    // 背景框
+    // 局部 fillRect 清除曲线残影（仅 304x114 像素，曲线区域保留灰色背景）
+    // 其他区域（状态栏/底栏）透出全局背景图
     tft.fillRect(graph_x - 2, graph_y - 2, graph_w + 4, graph_h + 4, COLOR_BG_HISTORY);
+    // 边框
     tft.drawRect(graph_x - 2, graph_y - 2, graph_w + 4, graph_h + 4, COLOR_AXIS);
 
     // 网格线
-    tft.setTextColor(COLOR_GRID);
-    tft.setTextSize(1);
     for (int y = graph_y; y <= graph_y + graph_h; y += 22) {
         tft.drawLine(graph_x, y, graph_x + graph_w, y, COLOR_GRID);
     }
@@ -263,7 +264,7 @@ void HistoryPage::drawWeatherGraph() {
         tft.drawLine(x, graph_y, x, graph_y + graph_h, COLOR_GRID);
     }
 
-    // 时间轴标签：按实际时间范围显示
+    // 时间轴标签：按实际时间范围显示（透明背景）
     if (historyCount >= 2) {
         time_t startTs = history[0].timestamp;
         time_t endTs = history[historyCount - 1].timestamp;
@@ -275,12 +276,11 @@ void HistoryPage::drawWeatherGraph() {
             time_t labelTs = startTs + (timeRange * i) / 6;
             struct tm *labelTm = localtime(&labelTs);
             int hour = labelTm->tm_hour;
-            
+
             int x_pos = graph_x + (graph_w * i) / 6;
             char label[4];
             sprintf(label, "%d", hour);
-            tft.setCursor(x_pos - 8, graph_y + graph_h + 2);
-            tft.println(label);
+            _display.drawTextWithTransparentBg(label, x_pos - 8, graph_y + graph_h + 2, COLOR_GRID);
         }
     } else {
         // 默认显示 0~24
@@ -288,15 +288,13 @@ void HistoryPage::drawWeatherGraph() {
             int x_pos = graph_x + (h * graph_w) / 24;
             char label[4];
             sprintf(label, "%d", h);
-            tft.setCursor(x_pos - 8, graph_y + graph_h + 2);
-            tft.println(label);
+            _display.drawTextWithTransparentBg(label, x_pos - 8, graph_y + graph_h + 2, COLOR_GRID);
         }
     }
 
     if (historyCount < 2) {
-        tft.setTextColor(COLOR_TEXT);
-        tft.setCursor(graph_x + 80, graph_y + 50);
-        tft.println("等待数据...");
+        // "等待数据..."：透明背景绘制
+        _display.drawTextWithTransparentBg("等待数据...", graph_x + 80, graph_y + 50, COLOR_TEXT);
         return;
     }
     
@@ -352,23 +350,27 @@ void HistoryPage::drawWeatherGraph() {
 }
 
 void HistoryPage::drawBottomBar() {
-    TFT_eSPI& tft = display.getTFT();
-    // 中灰背景
-    tft.fillRect(0, 155, 320, 15, COLOR_BG_HISTORY);
-    tft.setTextColor(COLOR_TEXT);
-    tft.setTextSize(1);
-    tft.setCursor(5, 160);
-    tft.print("Record: ");
-    tft.print(historyCount);
-    tft.print("  Interval: 10m");
+    // 背景图透出，不再 fillRect 覆盖整条底栏
+    // 记录数文本：透明背景
+    char recBuf[32];
+    sprintf(recBuf, "Record: %d  Interval: 10m", historyCount);
+    _display.drawTextWithTransparentBg(recBuf, 5, 155, COLOR_TEXT);
 
-    tft.setCursor(200, 160);
-    tft.setTextColor(COLOR_TEMP);
-    tft.print("T");
-    tft.setTextColor(COLOR_HUMI);
-    tft.print(" H");
-    tft.setTextColor(COLOR_PRESS);
-    tft.print(" P");
+    // 颜色图例：T/H/P 标签（透明背景，按段拼接位置）
+    TFT_eSPI& tft = _display.getTFT();
+    tft.loadFont(font_small_20);
+    int tW = tft.textWidth("T");
+    int hW = tft.textWidth(" H");
+    int x = tft.textWidth(recBuf);
+    tft.unloadFont();
+
+
+    x += 10;
+    _display.drawTextWithTransparentBg("T", x, 155, COLOR_TEMP);
+    x += tW;
+    _display.drawTextWithTransparentBg(" H", x, 155, COLOR_HUMI);
+    x += hW;
+    _display.drawTextWithTransparentBg(" P", x, 155, COLOR_PRESS);
 }
 
 void HistoryPage::checkAndCleanOldFiles() {

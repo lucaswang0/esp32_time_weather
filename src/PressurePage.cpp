@@ -15,7 +15,7 @@ struct PressureRecord {
 #define CAUTION_THRESHOLD  -2.0f  // 3小时下降超过2hPa触发注意
 
 PressurePage::PressurePage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
-    : display(disp), aht20(aht20),
+    : _display(disp), _aht20(aht20),
       lastPressure(-1.0f), lastChange3h(0.0f),
       lastWarningLevel("--"), lastRecordCount(0),
       lastDrawTime(0) {}
@@ -24,11 +24,8 @@ void PressurePage::onEnter() {
     Serial.println("[PressurePage] onEnter");
     // 先刷新历史记录数与3h变化量等显示数据（从 SPIFFS 读取当天文件）
     checkAlert();
-    display.clearScreen();
-    // 先用薄荷绿覆盖全屏，避免 PNG 背景图残留在 drawPage 之前造成视觉干扰
-    // 薄荷绿 (#95D5B2 -> RGB565 0x95B6)
-    TFT_eSPI& tft = display.getTFT();
-    tft.fillRect(0, 0, 320, 170, 0x95B6);
+    // 加载背景图（DisplayManager 内部从 PROGMEM bg2-bg9 选择并加载）
+    _display.clearScreen();
     drawPage();
 }
 
@@ -140,9 +137,8 @@ String PressurePage::getTrendArrow(float change) {
 }
 
 void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
-    TFT_eSPI& tft = display.getTFT();
-    // 卡片背景 + 边框
-    tft.fillRoundRect(x, y, w, h, 3, COLOR_CARD);
+    TFT_eSPI& tft = _display.getTFT();
+    // 背景图透出，仅保留红色边框
     tft.drawRect(x, y, w, h, TFT_RED);
 
     // 打开当日历史文件
@@ -153,10 +149,8 @@ void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
 
     fs::File file = SPIFFS.open(filename, FILE_READ);
     if (!file) {
-        tft.setTextSize(1);
-        tft.setTextColor(0xFFFF);  // 白字（薄荷绿背景）
-        tft.setCursor(x + w/2 - 30, y + h/2 - 4);
-        tft.print("无数据");
+        // 透明背景绘制"无数据"
+        _display.drawTextWithTransparentBgFont("无数据", x + w/2 - 30, y + h/2 - 4, COLOR_WHITE, font_small_20);
         return;
     }
 
@@ -178,10 +172,8 @@ void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
 
     if (fileCount < 2) {
         file.close();
-        tft.setTextSize(1);
-        tft.setTextColor(0xFFFF);  // 白字（薄荷绿背景）
-        tft.setCursor(x + w/2 - 30, y + h/2 - 4);
-        tft.print("数据不足");
+        // 透明背景绘制"数据不足"
+        _display.drawTextWithTransparentBgFont("数据不足", x + w/2 - 30, y + h/2 - 4, COLOR_WHITE, font_small_20);
         return;
     }
 
@@ -216,42 +208,33 @@ void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
     }
     file.close();
 
-    // 角落显示 min/max
-    tft.setTextSize(1);
-    tft.setTextColor(0xFFFF);  // 白字（薄荷绿背景）
+    // 角落显示 min/max（透明背景绘制）
     char label[12];
     sprintf(label, "%.0f", pmax);
-    tft.setCursor(x + 4, y + 2);
-    tft.print(label);
+    _display.drawTextWithTransparentBgFont(label, x + 4, y + 2, COLOR_SUN, font_small_20);
     sprintf(label, "%.0f", pmin);
-    tft.setCursor(x + 4, y + h - 10);
-    tft.print(label);
+    _display.drawTextWithTransparentBgFont(label, x + 4, y + h - 10, COLOR_SUN, font_small_20);
 }
 
 void PressurePage::drawPage() {
-    TFT_eSPI& tft = display.getTFT();
+    TFT_eSPI& tft = _display.getTFT();
 
-    // 薄荷绿背景 (#95D5B2 -> RGB565 0x95B6)
-    tft.fillRect(0, 0, 320, 170, 0x95B6);
+    // 标题栏：白色文字（背景图透出，不再 fillRect 覆盖整屏）
+    _display.drawTextWithTransparentBgFont("气压监测", 8, 6, COLOR_WHITE, font_small_20);
 
-    // 标题栏：白色文字（薄荷绿背景）
-    tft.setTextColor(0xFFFF);
-    tft.setTextSize(1);
-    tft.setCursor(8, 6);
-    tft.println("气压监测");
     // 右下角更新时间
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
     char time_str[16];
     strftime(time_str, sizeof(time_str), "%H:%M", tm_info);
-    tft.setCursor(280, 6);
-    tft.printf("%s", time_str);
+    _display.drawTextWithTransparentBgFont(time_str, 280, 6, COLOR_WHITE, font_small_20);
+
     // 标题下方分隔线
     tft.drawFastHLine(0, 18, 320, TFT_RED);
 
     // 当前气压读取
-    float currentPressure = aht20.getPressure();
-    bool valid = aht20.isValid() && aht20.isBMP280Connected();
+    float currentPressure = _aht20.getPressure();
+    bool valid = _aht20.isValid() && _aht20.isBMP280Connected();
     // 气压换算海拔（压高公式）：h = 44330 * (1 - (p/p0)^(1/5.255))，p0 = 1013.25 hPa
     float altitude = 44330.0f * (1.0f - powf(currentPressure / 1013.25f, 1.0f / 5.255f));
 
@@ -261,51 +244,44 @@ void PressurePage::drawPage() {
     int value_x = 20;       // 气压数值 x 起点
     char buf[32];
 
-    tft.setTextColor(0xFFFF);  // 白字（薄荷绿背景）
-    tft.setCursor(axis_x, value_y);
-    tft.print("hPa");
+    // 左侧 hPa 标签（透明背景）
+    _display.drawTextWithTransparentBg("hPa", axis_x, value_y, COLOR_WHITE);
 
-    tft.setTextColor(0xFFFF);  // 白字（薄荷绿背景）气压主数值
+    // 气压主数值
     if (valid) {
         sprintf(buf, "%.1f", currentPressure);
     } else {
         strcpy(buf, "--");
     }
-    // 数值行：先填薄荷绿底防止上次残影（与背景一致，自动从屏读）
-    tft.fillRect(value_x, value_y, 130, 30, 0x95B6);
-    display.drawTextWithBgFont(buf, value_x, value_y, 0xFFFF, font_medium_32);
+    // 局部 fillRect 清除残影（仅 130x30 像素，不覆盖整个屏幕）
+    // tft.fillRect(value_x, value_y, 130, 30, 0x95B6);
+    _display.drawTextWithTransparentBgFont(buf, value_x, value_y, COLOR_WHITE, font_medium_32);
 
-    // 单位标识：放在数值右侧，紧凑
-    tft.setTextColor(0xFFFF);  // 白字
-    tft.setCursor(value_x + 125, value_y + 12);
-    tft.print("hPa");
+    // 单位标识：放在数值右侧，紧凑（透明背景）
+    _display.drawTextWithTransparentBg("hPa", value_x + 125, value_y + 12, COLOR_WHITE);
 
-    // 海拔（右侧坐标列）
-    tft.setTextColor(0xFFFF);  // 白字
-    tft.setCursor(220, value_y);
-    tft.print("海拔");
-    tft.setTextColor(0xFFFF);  // 白字
-    tft.setCursor(220, value_y + 14);
+    // 海拔（右侧坐标列，透明背景）
+    _display.drawTextWithTransparentBg("海拔", 220, value_y, COLOR_WHITE);
     if (valid) {
-        tft.printf("%.0f m", altitude);
+        sprintf(buf, "%.0f m", altitude);
     } else {
-        tft.print("-- m");
+        strcpy(buf, "-- m");
     }
+    _display.drawTextWithTransparentBg(buf, 220, value_y + 14, COLOR_WHITE);
 
     // 区域分隔线
     tft.drawFastHLine(0, 65, 320, TFT_RED);
 
     // 3小时变化量（标签 size 1，数值 size 2）
     int row1_y = 72;
-    tft.setTextSize(1);
-    tft.setTextColor(0xFFFF);  // 白字
-    tft.setCursor(8, row1_y);
-    tft.print("3h");
-    tft.setCursor(36, row1_y);
-    tft.print("变化量");
-    // 数值列（size 2）
+    // 标签透明背景绘制
+    _display.drawTextWithTransparentBg("3h", 8, row1_y, COLOR_WHITE);
+    _display.drawTextWithTransparentBg("变化量", 36, row1_y, COLOR_WHITE);
+
+    // 数值列（size 2，使用默认字体；保持 tft.setTextSize(2)+tft.print 方式）
     int val_col_x = 110;
-    tft.fillRect(val_col_x, row1_y - 2, 200, 18, 0x95B6);
+    // 局部 fillRect 清除残影（仅 200x18 像素）
+    // tft.fillRect(val_col_x, row1_y - 2, 200, 18, 0x95B6);
     tft.setTextSize(2);
     if (lastRecordCount >= ALERT_RECORDS_NEEDED) {
         sprintf(buf, "%.1f", lastChange3h);
@@ -314,19 +290,21 @@ void PressurePage::drawPage() {
         } else if (lastChange3h > 0.5f) {
             tft.setTextColor(COLOR_GREEN);
         } else {
-            tft.setTextColor(0xFFFF);  // 白字（薄荷绿背景）
+            tft.setTextColor(COLOR_WHITE);
         }
         tft.setCursor(val_col_x, row1_y);
         tft.print(buf);
-        tft.setTextColor(0xFFFF);  // 白字
+        tft.setTextColor(COLOR_WHITE);
         tft.print(" hPa ");
-        tft.setTextColor(0xFFFF);  // 白字，趋势箭头
+        tft.setTextColor(COLOR_WHITE);
         tft.print(getTrendArrow(lastChange3h));
     } else {
-        tft.setTextColor(0xFFFF);  // 白字
+        tft.setTextColor(COLOR_WHITE);
         tft.setCursor(val_col_x, row1_y);
         tft.print("积累中...");
     }
+    // 还原 textSize 以免影响后续绘制
+    tft.setTextSize(1);
 
     // 区域分隔线
     tft.drawFastHLine(0, 92, 320, TFT_RED);
@@ -337,28 +315,21 @@ void PressurePage::drawPage() {
     // 区域分隔线
     tft.drawFastHLine(0, 146, 320, TFT_RED);
 
-    // 底部信息行：记录数 + 状态等级（合并成一行，size 1）
+    // 底部信息行：记录数 + 状态等级（合并成一行，size 1，透明背景）
     int row3_y = 152;
-    tft.setTextSize(1);
-    tft.setTextColor(0xFFFF);  // 白字
-    tft.setCursor(8, row3_y);
-    tft.print("记录");
-    tft.setCursor(36, row3_y);
-    tft.printf("%d/%d", lastRecordCount, ALERT_RECORDS_NEEDED);
-    // 状态等级标签 + 文字
-    tft.setCursor(140, row3_y);
+    _display.drawTextWithTransparentBg("记录", 8, row3_y, COLOR_WHITE);
+    sprintf(buf, "%d/%d", lastRecordCount, ALERT_RECORDS_NEEDED);
+    _display.drawTextWithTransparentBg(buf, 36, row3_y, COLOR_WHITE);
+
+    // 状态等级标签 + 文字（透明背景，按等级着色）
     if (lastWarningLevel == "警告") {
-        tft.setTextColor(COLOR_GOLD_WARM);
-        tft.print("[! 暴风雨 !]");
+        _display.drawTextWithTransparentBg("[! 暴风雨 !]", 140, row3_y, COLOR_GOLD_WARM);
     } else if (lastWarningLevel == "注意") {
-        tft.setTextColor(0xFD20);
-        tft.print("[气压下降]");
+        _display.drawTextWithTransparentBg("[气压下降]", 140, row3_y, 0xFD20);
     } else if (lastWarningLevel == "正常") {
-        tft.setTextColor(COLOR_GREEN);
-        tft.print("[天气稳定]");
+        _display.drawTextWithTransparentBg("[天气稳定]", 140, row3_y, COLOR_GREEN);
     } else {
-        tft.setTextColor(0xFFFF);
-        tft.print("[--]");
+        _display.drawTextWithTransparentBg("[--]", 140, row3_y, COLOR_WHITE);
     }
 
     // 底部边框

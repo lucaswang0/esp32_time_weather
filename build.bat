@@ -1,23 +1,4 @@
-﻿@echo off
-chcp 65001 >nul
-
-echo ==============================================
-echo     Weather Clock - Build Script
-echo ==============================================
-echo.
-echo Building firmware for ESP32...
-echo.
-
-cd /d "%~dp0"
-"%HOMEPATH%\.platformio\penv\Scripts\platformio.exe" run
-
-echo.
-echo ==============================================
-if %errorlevel% equ 0 (
-    echo Build successful!
-) else (
-    echo Build failed, error code: %errorlevel%
-)
-echo ==============================================
-echo.
-@REM pause
+@echo off
+set PYTHONLEGACYWINDOWSSTDIO=1
+set PYTHONIOENCODING=utf-8
+C:\Users\qtc\.platformio\penv\Scripts\platformio.exe run 2>&1

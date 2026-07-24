@@ -6,7 +6,7 @@
 
 TempPage::TempPage(DisplayManager& disp, WeatherManager& weather,
                    AHT20BMP280Sensor& aht20, WiFiManager& wifi)
-    : display(disp), weather(weather), aht20(aht20), wifi(wifi) {
+    : _display(disp), _weather(weather), _aht20(aht20), _wifi(wifi) {
     weekdays[0] = "周日";
     weekdays[1] = "周一";
     weekdays[2] = "周二";
@@ -18,7 +18,7 @@ TempPage::TempPage(DisplayManager& disp, WeatherManager& weather,
 
 void TempPage::onEnter() {
     Serial.println("[TempPage] onEnter");
-    display.clearScreen();
+    _display.clearScreen();
     lastHour = -1;
     lastMinute = -1;
     lastSecond = -1;
@@ -51,24 +51,24 @@ void TempPage::updateTime(int year, int month, int day, int hour, int minute, in
 }
 
 void TempPage::update() {
-    bool forecastValid = !weather.getForecast(0).date.isEmpty();
-    drawWeather(weather.getCity(), weather.getWeatherText(), weather.getTemperature(), weather.getWeatherCode(), forecastValid);
+    bool forecastValid = !_weather.getForecast(0).date.isEmpty();
+    drawWeather(_weather.getCity(), _weather.getWeatherText(), _weather.getTemperature(), _weather.getWeatherCode(), forecastValid);
 
-    const DailyForecast& todayForecast = weather.getForecast(0);
-    drawForecast(todayForecast.tempMin, todayForecast.tempMax, todayForecast.textDay.length() > 0 ? weather.getWeatherCode() : "");
+    const DailyForecast& todayForecast = _weather.getForecast(0);
+    drawForecast(todayForecast.tempMin, todayForecast.tempMax, todayForecast.textDay.length() > 0 ? _weather.getWeatherCode() : "");
 
     drawSunMoon(todayForecast.sunrise, todayForecast.sunset);
 
-    if (forecastValid && weather.getTemperature().length() > 0) {
-        float temp = weather.getTemperature().toFloat();
-        float humi = todayForecast.humidity.length() > 0 ? todayForecast.humidity.toFloat() : aht20.getHumidity();
+    if (forecastValid && _weather.getTemperature().length() > 0) {
+        float temp = _weather.getTemperature().toFloat();
+        float humi = todayForecast.humidity.length() > 0 ? todayForecast.humidity.toFloat() : _aht20.getHumidity();
         float apparent = calcApparentTemperature(temp, humi);
         drawApparentTemp(apparent, humi);
     }
 
-    drawIndoorTemp(aht20.getTemperature(), aht20.isValid());
-    drawIndoorHumidity(aht20.getHumidity(), aht20.isValid());
-    drawWiFiStatus(wifi.isConnected());
+    drawIndoorTemp(_aht20.getTemperature(), _aht20.isValid());
+    drawIndoorHumidity(_aht20.getHumidity(), _aht20.isValid());
+    drawWiFiStatus(_wifi.isConnected());
 }
 
 void TempPage::drawTime(int year, int month, int day, int hour, int minute, int second, int weekday) {
@@ -78,7 +78,7 @@ void TempPage::drawTime(int year, int month, int day, int hour, int minute, int 
         
         char timeStr[10];
         sprintf(timeStr, "%02d:%02d", hour, minute);
-        display.drawTextWithTransparentBgFont(timeStr, 0, 40, COLOR_WHITE, font_large_72);
+        _display.drawTextWithTransparentBgFont(timeStr, 0, 40, COLOR_WHITE, font_large_72);
     }
     
     if (lastSecond != second) {
@@ -86,7 +86,7 @@ void TempPage::drawTime(int year, int month, int day, int hour, int minute, int 
         
         char secStr[5];
         sprintf(secStr, "%02d", second);
-        display.drawTextWithTransparentBgFont(secStr, 78, 28, COLOR_WHITE, font_small_20);
+        _display.drawTextWithTransparentBgFont(secStr, 78, 28, COLOR_WHITE, font_small_20);
     }
     
     if (lastYear != year || lastMonth != month || lastDay != day) {
@@ -98,7 +98,7 @@ void TempPage::drawTime(int year, int month, int day, int hour, int minute, int 
         char dateStr[20];
         sprintf(dateStr, "%04d.%02d.%02d %s", year, month, day, weekdays[weekday]);
         Serial.printf("[TempPage] DATE draw at 0,150 = %s\n", dateStr);
-        display.drawTextWithTransparentBgFont(dateStr, 0, 150, COLOR_WHITE, font_small_20);
+        _display.drawTextWithTransparentBgFont(dateStr, 0, 150, COLOR_WHITE, font_small_20);
     }
 }
 
@@ -108,7 +108,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         lastCity = city;
         
         String cityStr = city.length() > 0 ? city : "--";
-        display.drawTextWithTransparentBg(cityStr.c_str(), 0, 10, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(cityStr.c_str(), 0, 10, COLOR_WHITE);
     }
     
     if (lastWeather != weather || lastForecastValid != forecastValid) {
@@ -117,9 +117,9 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         lastForecastValid = forecastValid;
         
         String weatherStr = weather.length() > 0 ? weather : "--";
-        display.drawTextWithTransparentBg(weatherStr.c_str(), 270, 40, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(weatherStr.c_str(), 270, 40, COLOR_WHITE);
         
-        TFT_eSPI& tft = display.getTFT();
+        TFT_eSPI& tft = _display.getTFT();
         tft.loadFont(font_small_20);
         int weatherWidth = tft.textWidth(weatherStr);
         int weatherHeight = tft.fontHeight();
@@ -134,7 +134,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
     if (lastWeatherCode != weatherCode) {
         Serial.printf("[TempPage] 天气代码变更: %s\n", weatherCode.c_str());
         lastWeatherCode = weatherCode;
-        display.drawWeatherIcon(200, 20, weatherCode);
+        _display.drawWeatherIcon(200, 20, weatherCode);
     }
     
     if (lastTemp != temp) {
@@ -142,7 +142,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         lastTemp = temp;
         
         String tempStr = "外:" + (temp.length() > 0 ? temp : "--");
-        display.drawTextWithTransparentBg(tempStr.c_str(), 150, 126, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(tempStr.c_str(), 150, 126, COLOR_WHITE);
     }
 }
 
@@ -157,7 +157,7 @@ void TempPage::drawForecast(const String& tempMin, const String& tempMax, const 
     String forecastStrMin = tempMin + "°" + "- ";
     String forecastStrMax = tempMax + "°";
     String forecastStr = forecastStrMin + forecastStrMax;
-    display.drawTextWithTransparentBgFont(forecastStr.c_str(), 200, 95, COLOR_WHITE, font_medium_32);
+    _display.drawTextWithTransparentBgFont(forecastStr.c_str(), 200, 95, COLOR_WHITE, font_medium_32);
 }
 
 void TempPage::drawSunMoon(const String& sunrise, const String& sunset) {
@@ -168,10 +168,10 @@ void TempPage::drawSunMoon(const String& sunrise, const String& sunset) {
     lastSunset = sunset;
 
     String sunStr = sunrise.length() > 0 ? ("日出:" + sunrise) : "日出--";
-    display.drawTextWithTransparentBg(sunStr.c_str(), 0, 105, COLOR_WHITE);
+    _display.drawTextWithTransparentBg(sunStr.c_str(), 0, 105, COLOR_WHITE);
 
     String moonStr = sunset.length() > 0 ? ("日落:" + sunset) : "日落--";
-    display.drawTextWithTransparentBg(moonStr.c_str(), 0, 126, COLOR_WHITE);
+    _display.drawTextWithTransparentBg(moonStr.c_str(), 0, 126, COLOR_WHITE);
 }
 
 void TempPage::drawIndoorTemp(float temp, bool valid) {
@@ -190,9 +190,9 @@ void TempPage::drawIndoorTemp(float temp, bool valid) {
     if (lastIndoorValid) {
         char tempStr[20];
         sprintf(tempStr, "内:%.1f°", lastIndoorTemp);
-        display.drawTextWithTransparentBg(tempStr, 150, 150, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(tempStr, 150, 150, COLOR_WHITE);
     } else {
-        display.drawTextWithTransparentBg("内:--", 150, 150, COLOR_WHITE);
+        _display.drawTextWithTransparentBg("内:--", 150, 150, COLOR_WHITE);
     }
 }
 
@@ -211,9 +211,9 @@ void TempPage::drawIndoorHumidity(float humidity, bool valid) {
 
     if (lastIndoorHumidityValid) {
         String humStr = "湿:" + String(lastIndoorHumidity, 1) + "%";
-        display.drawTextWithTransparentBg(humStr.c_str(), 225, 150, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(humStr.c_str(), 225, 150, COLOR_WHITE);
     } else {
-        display.drawTextWithTransparentBg("湿:--%", 225, 150, COLOR_WHITE);
+        _display.drawTextWithTransparentBg("湿:--%", 225, 150, COLOR_WHITE);
     }
 }
 
@@ -229,7 +229,7 @@ void TempPage::drawWiFiStatus(bool connected) {
         lastRSSI = rssi;
 
         if (!connected) {
-            display.drawTextWithTransparentBgFont("--", 280, 3, COLOR_GRAY_DARK, font_small_20);
+            _display.drawTextWithTransparentBgFont("--", 280, 3, COLOR_GRAY_DARK, font_small_20);
         } else {
             String rssiStr = String(rssi);
             char rssiChar[8];
@@ -248,7 +248,7 @@ void TempPage::drawWiFiStatus(bool connected) {
                 wifiColor = COLOR_RED;
             }
 
-            display.drawTextWithTransparentBgFont(rssiChar, 285, 3, wifiColor, font_small_20);
+            _display.drawTextWithTransparentBgFont(rssiChar, 285, 3, wifiColor, font_small_20);
         }
     }
 }
@@ -287,5 +287,5 @@ void TempPage::drawApparentTemp(float apparentTemp, float humidity) {
     
     char tempStr[32];
     sprintf(tempStr, "体:%.1f°%s", apparentTemp, comfort);
-    display.drawTextWithTransparentBg(tempStr, 225, 126, COLOR_WHITE);
+    _display.drawTextWithTransparentBg(tempStr, 225, 126, COLOR_WHITE);
 }

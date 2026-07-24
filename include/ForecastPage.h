@@ -16,8 +16,8 @@ public:
     void update() override;
 
 private:
-    DisplayManager& display;
-    WeatherManager& weather;
+    DisplayManager& _display;
+    WeatherManager& _weather;
     
     String lastForecastPageKey = "";
     

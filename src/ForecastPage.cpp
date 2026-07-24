@@ -3,19 +3,19 @@
 #include "WeatherManager.h"
 
 ForecastPage::ForecastPage(DisplayManager& disp, WeatherManager& weather)
-    : display(disp), weather(weather) {}
+    : _display(disp), _weather(weather) {}
 
 void ForecastPage::onEnter() {
     Serial.println("[ForecastPage] onEnter");
-    display.clearScreen();
+    _display.clearScreen();
     lastForecastPageKey = "";
 }
 
 void ForecastPage::update() {
     draw3DayForecast(
-        weather.getForecast(0),
-        weather.getForecast(1),
-        weather.getForecast(2)
+        _weather.getForecast(0),
+        _weather.getForecast(1),
+        _weather.getForecast(2)
     );
 }
 
@@ -31,7 +31,7 @@ void ForecastPage::draw3DayForecast(const DailyForecast& day0, const DailyForeca
     const DailyForecast days[3] = {day0, day1, day2};
     const char* labels[3] = {"今天", "明天", "后天"};
 
-    TFT_eSPI& tft = display.getTFT();
+    TFT_eSPI& tft = _display.getTFT();
     tft.setTextDatum(TC_DATUM);
     tft.loadFont(font_small_20);
     tft.setTextColor(TFT_WHITE);
