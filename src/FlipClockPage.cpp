@@ -179,14 +179,14 @@ void FlipClockPage::init_time() {
         int m = timeinfo.tm_min;
         int s = timeinfo.tm_sec;
         
-        digits[0] = {s % 10, 9, s % 10, -1};
-        digits[1] = {s / 10, 5, s / 10, -1};
-        digits[2] = {m % 10, 9, m % 10, -1};
-        digits[3] = {m / 10, 5, m / 10, -1};
-        digits[4] = {h % 10, 9, h % 10, -1};
-        digits[5] = {h / 10, 2, h / 10, -1};
+        digits[0] = {(uint8_t)(s % 10), (uint8_t)9, (uint8_t)(s % 10), (int8_t)-1};
+        digits[1] = {(uint8_t)(s / 10), (uint8_t)5, (uint8_t)(s / 10), (int8_t)-1};
+        digits[2] = {(uint8_t)(m % 10), (uint8_t)9, (uint8_t)(m % 10), (int8_t)-1};
+        digits[3] = {(uint8_t)(m / 10), (uint8_t)5, (uint8_t)(m / 10), (int8_t)-1};
+        digits[4] = {(uint8_t)(h % 10), (uint8_t)9, (uint8_t)(h % 10), (int8_t)-1};
+        digits[5] = {(uint8_t)(h / 10), (uint8_t)2, (uint8_t)(h / 10), (int8_t)-1};
     } else {
-        for (int i = 0; i < 6; i++) digits[i] = {0, 9, 0, -1};
+        for (int i = 0; i < 6; i++) digits[i] = {(uint8_t)0, (uint8_t)9, (uint8_t)0, (int8_t)-1};
     }
 }
 
@@ -342,7 +342,7 @@ void FlipClockPage::render_trapezoid(int cx, const uint16_t *src, const StripEnt
                 if (dy0 == dy1) dy1 = dy0 + 1;
                 for (int dy = dy0; dy < dy1; dy++) {
                     if (dy >= 0 && dy < CH) {
-                        buf[dy * sp_w + dx] = (BG_COLOR >> 8) | (BG_COLOR << 8);
+                        buf[dy * sp_w + dx] = (uint16_t)((BG_COLOR >> 8) | (BG_COLOR << 8));
                     }
                 }
             }

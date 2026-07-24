@@ -10,8 +10,6 @@
 - **触摸**: TTP223 电容触摸传感器
 - **LED**: 状态指示灯（WiFi未连接时快速闪烁，正常运行时关闭）
 - **蜂鸣器**: 有源蜂鸣器（低电平触发，初始化后保持高电平静音状态）
-<<<<<<< HEAD
-=======
 
 ## GPIO 引脚配置
 
@@ -51,14 +49,14 @@
 - **GPIO10 (TOUCH)**: 电容触摸传感器，上拉输入，触摸时为低电平
 - **GPIO12 (LED_D4)**: 主状态指示灯，WiFi未连接时快速闪烁
 - **GPIO13 (LED_D5)**: 备用LED，当前未使用
->>>>>>> 496890a55118ae73cfaf8090ba5e56b0c1c340f4
 
 ## 项目结构
 
 ```
 time_weather_v2/
 ├── src/                    # 主程序源码
-│   ├── main.cpp            # 主入口，任务调度
+│   ├── main.cpp            # 主入口，非阻塞循环（触摸、显示、LED、报时、亮度）
+│   ├── TaskManager.cpp     # FreeRTOS任务管理器（WiFi、时间同步、天气、传感器、历史、时间显示）
 │   ├── PageManager.cpp     # 页面管理器
 │   ├── DisplayManager.cpp  # 显示管理器（背景、字体）
 │   ├── WiFiManager.cpp     # WiFi 连接管理（含 Web 配网 + ESP-Touch SmartConfig + SPIFFS文件管理）
@@ -72,9 +70,10 @@ time_weather_v2/
 ├── include/                # 头文件
 │   ├── config.h            # 引脚、WiFi、更新间隔配置（需自行创建）
 │   ├── secrets.h           # 敏感信息声明（extern）
+│   ├── TaskManager.h       # 任务管理器接口
 │   ├── PageManager.h       # 页面枚举定义
 │   ├── PageBase.h          # 页面基类
-│   ├── bg1.h~bg9.h         # 背景图（RGB565 数组）
+│   ├── bg2.h~bg6.h, bg8.h~bg9.h  # 背景图（RGB565 数组）
 │   └── font_*.h            # 自定义字体
 ├── Python-ESP32-TFT-Stream/ # PC端屏幕流服务器
 │   ├── server.py           # 主服务器
@@ -97,26 +96,39 @@ time_weather_v2/
 | PAGE_WIFI_INFO | WiFi信息 | 连接状态、SSID、IP、信号强度 |
 | PAGE_AP_MODE | AP配网 | 启动时WiFi连接失败自动进入，或长按10秒进入，提供WiFi配置门户（显示已保存WiFi列表），同时支持 ESP-Touch SmartConfig 蓝牙配网 |
 | PAGE_STREAMING | 屏幕流 | 接收PC端屏幕流实时显示 |
+| PAGE_FLIP_CLOCK | 翻页时钟 | 翻页动画时钟显示 |
 
 ## 交互方式
 
 | 操作 | 效果 |
 |------|------|
 | **短按触摸** | 切换到下一个页面 |
+| **双击触摸** | 切换到上一个页面 |
 | **长按10秒以上** | 进入AP配网模式 |
-| **双击触摸** | 循环切换背光亮度（4档） |
 
 ## 核心特性
 
 - **智能亮度**: 根据日出日落时间自动调整背光
 - **历史数据**: 每10分钟保存一次传感器数据到 SPIFFS
 - **气压预警**: 气压骤降时自动切换到气压页面并警告
-- **IP自动定位**: 通过公网IP自动获取所在城市经纬度，无需手动配置LOCATION
+- **IP自动定位**: 通过公网IP自动获取所在城市经纬度，仅获取一次，失败时使用默认配置
 - **双模式配网**: 启动时WiFi连接失败自动进入配网模式，同时支持两种配网方式：
   - **Web 配网**: 连接 `ESP32-Weather` WiFi热点，通过浏览器访问 `192.168.4.1` 配置WiFi
   - **ESP-Touch SmartConfig**: 使用手机APP（如ESP-Touch、乐鑫官方配网工具）发送WiFi信息，无需手动连接热点
 - **屏幕流传输**: 通过TCP接收PC屏幕画面
 - **文件管理**: 联网后自动启动WebServer，通过浏览器访问 `http://<ESP32_IP>/fs` 进行SPIFFS文件上传/下载/删除
+- **任务管理**: 使用 FreeRTOS 任务管理器统一管理所有阻塞操作（WiFi、时间同步、天气、传感器、历史、时间显示）
+
+## 任务调度
+
+| 任务名 | 核心 | 优先级 | 栈大小 | 调度间隔 |
+|--------|------|--------|--------|----------|
+| TaskWiFi | 0 | 3 | 4KB | 100ms |
+| TaskTimeSync | 0 | 4 | 4KB | 1s |
+| TaskWeather | 0 | 4 | 8KB | 1s |
+| TaskSensors | 1 | 5 | 2KB | 500ms |
+| TaskHistory | 1 | 5 | 4KB | 1s |
+| TimeDisplay | 0 | 2 | 8KB | 100ms |
 
 ## 快速开始
 
@@ -184,7 +196,7 @@ python server.py
 3. **配网方式**: 
    - **Web 配网**: 在手机/电脑上连接 `ESP32-Weather` WiFi热点，浏览器访问 `192.168.4.1` 配置WiFi
    - **ESP-Touch**: 打开ESP-Touch手机APP，输入WiFi信息即可，无需连接热点
-4. **正常使用**: 短按触摸切换页面，双击调整亮度，长按10秒进入配网模式
+4. **正常使用**: 短按触摸切换页面，双击切换到上一页，长按10秒进入配网模式
 5. **屏幕流**: 在PC上启动服务器，在ESP32上切换到"屏幕流"页面接收画面
 6. **文件管理**: 联网后WebServer自动启动，直接在浏览器访问 `http://<ESP32_IP>/fs`
 
@@ -202,10 +214,30 @@ python server.py
 - PNGdec - PNG解码
 - ArduinoJson - JSON解析
 - ArduinoUZlib - gzip解压
-- DallasTemperature / OneWire - 温度传感器
-- DHT sensor library - DHT传感器
 
 ## 更新日志
+
+### 2026-07-24
+
+- **重构**: 任务管理架构
+  - 新增 `TaskManager.*` 文件，统一管理所有 FreeRTOS 任务
+  - 将阻塞操作（WiFi、时间同步、天气、传感器、历史、时间显示）迁移到独立任务
+  - `main.cpp` 精简为非阻塞循环，仅保留触摸、显示、LED、报时、亮度控制
+  - 各任务独立调度，互不影响，提高系统响应性
+
+- **优化**: 天气获取逻辑
+  - IP定位城市：启动后仅获取一次，成功后不再获取
+  - 城市信息：IP定位成功后仅获取一次，失败时使用默认配置
+  - 当前天气：获取成功后间隔10分钟再次获取
+  - 天气预报：获取成功后间隔1小时再次获取
+
+- **优化**: Flash 空间
+  - 删除 `bg1.h` 和 `bg7.h` 背景图文件
+  - Flash 使用从 96.1% 降低到 90.0%，节省约 217KB
+
+- **修复**: FlipClockPage 编译警告
+  - 修复 `init_time()` 中的类型窄化转换警告
+  - 修复 `render_trapezoid()` 中的整数溢出警告
 
 ### 2026-07-18
 

@@ -6,6 +6,7 @@
 #include "TimeManager.h"
 #include "WeatherManager.h"
 #include "DisplayManager.h"
+#include "TaskManager.h"
 
 #include "AHT20BMP280Sensor.h"
 #include "LEDController.h"
@@ -48,6 +49,10 @@ APModePage*          pAPModePage          = nullptr;
 FlipClockPage*       pFlipClockPage       = nullptr;
 PageManager          pageManager(displayManager);
 
+// ==================== TaskManager ====================
+
+TaskManager* taskManager = nullptr;
+
 // Arduino core 的 getArduinoLoopTaskStackSize() 是 weak，默认返回 8K。
 // 这里 override 为 32K，避免 HistoryPage/PressurePage 绘制链把栈踩穿。
 // Arduino.h 把它声明成 C++ linkage（C++ 函数允许 weak override），所以不要用 extern "C"。
@@ -64,29 +69,12 @@ int currentBacklightLevel = 2;
 
 // ==================== 时间戳 ====================
 
-unsigned long lastWiFiCheck = 0;
-unsigned long lastTimeSync = 0;
-unsigned long lastWeatherUpdate = 0;
-unsigned long lastTempRead = 0;
 unsigned long lastLEDConditionCheck = 0;
 unsigned long lastAutoBrightnessCheck = 0;
-unsigned long lastHistorySave = 0;
-
-int weatherStep = 0;
-int weatherRetryCount = 0;
-const int MAX_WEATHER_RETRIES = 5;
-const unsigned long WEATHER_BACKOFF_MS = 300000;
-unsigned long weatherBackoffEnd = 0;
 int lastAutoBrightnessDay = -1;
 SemaphoreHandle_t displayMutex = NULL;
 
-bool timeSynced = false;
-bool firstSyncAttempted = false;
-const unsigned long TIME_SYNC_INTERVAL_INITIAL = 5 * 60 * 1000;
-const unsigned long TIME_SYNC_INTERVAL_SUCCESS = 60 * 60 * 1000;
 
-// ==================== FreeRTOS 时间任务声明 ====================
-void TaskTimeDisplay(void *pvParameters);
 
 // ==================== 背光与触摸辅助函数 ====================
 
@@ -278,13 +266,10 @@ void setup() {
     if (wifiManager.isConnected()) {
         Serial.println("[Main] WiFi连接成功，开始时间同步");
         if (timeManager.sync()) {
-            timeSynced = true;
             Serial.println("[Main] NTP时间同步成功");
         } else {
-            Serial.println("[Main] NTP时间同步失败，将在循环中重试");
+            Serial.println("[Main] NTP时间同步失败，将在任务中重试");
         }
-        firstSyncAttempted = true;
-        lastWeatherUpdate = millis();
     } else {
         Serial.println("[Main] WiFi连接失败，开启AP配网模式");
         wifiManager.startAPMode();
@@ -313,80 +298,28 @@ void setup() {
     
     pageManager.begin();
 
-    // 初始化传感器定时器时间戳
-    lastTempRead = millis();
-
-    // 历史保存仅在NTP同步后才初始化
-    if (timeSynced && timeManager.getYear() > 2020) {
-        int currentMinute = timeManager.getHour() * 60 + timeManager.getMinute();
-        int nextSlotMinute = ((currentMinute / 10) + 1) * 10;
-        int delayToNextSlot = (nextSlotMinute - currentMinute) * 60000;
-        lastHistorySave = millis() - (unsigned long)(600000 - delayToNextSlot);
-        Serial.printf("[Main] 历史保存首次对齐到 %02d:%02d（%d 分钟后）\n",
-                      (nextSlotMinute / 60) % 24, nextSlotMinute % 60,
-                      delayToNextSlot / 60000);
-    } else {
-        lastHistorySave = 0;
-        Serial.println("[Main] NTP未同步，历史保存暂不开启");
-    }
-
-    // Serial.println("\n[Main] ===== 模拟钟声测试 =====");
-    // Serial.println("[Main] Testing radioChime (1 times)...");
-    // buzzerController.radioChime();
-    // delay(5000);
-    // Serial.println("[Main] 钟声测试完成");
-
-    // 时间显示任务
-    xTaskCreatePinnedToCore(
-        TaskTimeDisplay,
-        "TimeDisplay",
-        8192,
-        NULL,
-        2,
-        NULL,
-        0
+    // 创建并启动 TaskManager
+    taskManager = new TaskManager(
+        wifiManager,
+        timeManager,
+        weatherManager,
+        aht20Bmp280Sensor,
+        pHistoryPage,
+        pPressurePage,
+        pTempPage,
+        pageManager,
+        displayMutex
     );
+    taskManager->begin();
    
     // 播放启动自检声
     buzzerController.startupChime();
     
 }
 
-// ==================== 时间显示任务（仅温度页面需要） ====================
-
-void TaskTimeDisplay(void *pvParameters) {
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    const TickType_t xFrequency = pdMS_TO_TICKS(100);
-
-    for (;;) {
-        if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            timeManager.update();
-            if (pageManager.current() == PageManager::PAGE_TEMP && pTempPage != nullptr) {
-                pTempPage->updateTime(
-                    timeManager.getYear(),
-                    timeManager.getMonth(),
-                    timeManager.getDay(),
-                    timeManager.getHour(),
-                    timeManager.getMinute(),
-                    timeManager.getSecond(),
-                    timeManager.getWeekday()
-                );
-            }
-            xSemaphoreGive(displayMutex);
-        }
-
-        vTaskDelayUntil(&xLastWakeTime, xFrequency);
-    }
-}
-
 // ==================== loop 功能函数声明 ====================
 
 void handleTouch();
-void handleWiFi(unsigned long now);
-void handleTimeSync(unsigned long now);
-void handleWeather(unsigned long now);
-void handleSensors(unsigned long now);
-void handleHistory(unsigned long now);
 void handleDisplay();
 void handleLED(unsigned long now);
 void handleChime();
@@ -397,11 +330,6 @@ void handleBrightness(unsigned long now);
 void loop() {
     unsigned long now = millis();
     handleTouch();
-    handleWiFi(now);
-    handleTimeSync(now);
-    handleWeather(now);
-    handleSensors(now);
-    handleHistory(now);
     handleDisplay();
     handleLED(now);
     handleChime();
@@ -415,205 +343,6 @@ void handleTouch() {
     if (touchSensor.hasNewTouch()) {
         handleTouchEvent(touchSensor.getLastTouchType());
         touchSensor.clearTouchEvent();
-    }
-}
-
-void handleWiFi(unsigned long now) {
-    if (now - lastWiFiCheck >= WIFI_CHECK_INTERVAL) {
-        lastWiFiCheck = now;
-        if (wifiManager.isAPStarted()) {
-            wifiManager.handleClient();
-            if (wifiManager.isConnected()) {
-                Serial.println("[Main] WiFi connected via config portal!");
-                wifiManager.stopAPMode();
-                lastWeatherUpdate = now;
-            } else if (pageManager.current() != PageManager::PAGE_AP_MODE) {
-                Serial.println("[Main] Left AP page, stopping AP and reconnecting WiFi...");
-                wifiManager.stopAPMode();
-            }
-        } else if (pageManager.current() == PageManager::PAGE_AP_MODE) {
-            Serial.println("[Main] AP mode stopped, switching back to temp page...");
-            if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                pageManager.switchTo(PageManager::PAGE_TEMP);
-                xSemaphoreGive(displayMutex);
-            }
-        } else if (wifiManager.isConnected()) {
-            wifiManager.maintainConnection();
-        } else {
-            Serial.println("[Main] WiFi not connected, attempting connection...");
-            if (wifiManager.connect()) {
-                Serial.println("[Main] WiFi connection successful!");
-                lastWeatherUpdate = now;
-            }
-        }
-    }
-
-    wifiManager.checkAPTimeout();
-}
-
-void handleTimeSync(unsigned long now) {
-    if (!wifiManager.isConnected()) {
-        return;
-    }
-
-    if (!timeSynced) {
-        if (!firstSyncAttempted) {
-            Serial.println("[Main] 首次时间同步尝试");
-            if (timeManager.sync()) {
-                timeSynced = true;
-                lastTimeSync = now;
-                Serial.println("[Main] 首次时间同步成功");
-            } else {
-                firstSyncAttempted = true;
-                lastTimeSync = now;
-                Serial.println("[Main] 首次时间同步失败，将每5分钟重试");
-            }
-        } else {
-            if (now - lastTimeSync >= TIME_SYNC_INTERVAL_INITIAL) {
-                lastTimeSync = now;
-                Serial.println("[Main] 时间同步重试...");
-                if (timeManager.sync()) {
-                    timeSynced = true;
-                    Serial.println("[Main] 时间同步成功");
-                } else {
-                    Serial.println("[Main] 时间同步失败，继续重试");
-                }
-            }
-        }
-    } else {
-        if (now - lastTimeSync >= TIME_SYNC_INTERVAL_SUCCESS) {
-            lastTimeSync = now;
-            timeManager.sync();
-        }
-    }
-}
-
-void handleWeather(unsigned long now) {
-    bool weatherDataEmpty = (weatherManager.getCity().length() == 0 ||
-                            weatherManager.getTemperature().length() == 0 ||
-                            weatherManager.getWeatherText().length() == 0);
-    if (weatherDataEmpty || weatherStep != 0) {
-        if (now < weatherBackoffEnd) {
-            return;
-        }
-        if (wifiManager.isConnected()) {
-            switch (weatherStep) {
-                case 0:
-                    Serial.println("[Main] Step 0/3: 通过IP获取定位");
-                    if (weatherManager.fetchLocationByIP()) {
-                        Serial.println("[Main] IP定位成功，继续获取城市信息");
-                        weatherRetryCount = 0;
-                    } else {
-                        Serial.println("[Main] IP定位失败，使用默认位置");
-                    }
-                    weatherStep = 1;
-                    break;
-                case 1:
-                    Serial.println("[Main] Step 1/3: 获取城市信息");
-                    if (weatherManager.fetchCityInfo()) {
-                        weatherStep = 2;
-                        weatherRetryCount = 0;
-                    } else {
-                        weatherRetryCount++;
-                        if (weatherRetryCount >= MAX_WEATHER_RETRIES) {
-                            Serial.printf("[Main] Step 1 重试%d次失败，回退到step 0\n", MAX_WEATHER_RETRIES);
-                            weatherStep = 0;
-                            weatherRetryCount = 0;
-                            weatherBackoffEnd = now + WEATHER_BACKOFF_MS;
-                            Serial.printf("[Main] 天气获取退避5分钟\n");
-                        }
-                    }
-                    break;
-                case 2:
-                    Serial.println("[Main] Step 2/3: 获取当前天气");
-                    if (weatherManager.fetchCurrentWeather()) {
-                        weatherStep = 3;
-                        weatherRetryCount = 0;
-                    } else {
-                        weatherRetryCount++;
-                        if (weatherRetryCount >= MAX_WEATHER_RETRIES) {
-                            Serial.printf("[Main] Step 2 重试%d次失败，回退到step 0\n", MAX_WEATHER_RETRIES);
-                            weatherStep = 0;
-                            weatherRetryCount = 0;
-                            weatherBackoffEnd = now + WEATHER_BACKOFF_MS;
-                            Serial.printf("[Main] 天气获取退避5分钟\n");
-                        }
-                    }
-                    break;
-                case 3:
-                    Serial.println("[Main] Step 3/3: 获取天气预报");
-                    if (weatherManager.fetch3DayForecast()) {
-                        weatherStep = 0;
-                        lastWeatherUpdate = now;
-                        weatherRetryCount = 0;
-                        weatherBackoffEnd = 0;
-                        Serial.println("[Main] 天气数据获取完成！");
-                    } else {
-                        weatherRetryCount++;
-                        if (weatherRetryCount >= MAX_WEATHER_RETRIES) {
-                            Serial.printf("[Main] Step 3 重试%d次失败，回退到step 0\n", MAX_WEATHER_RETRIES);
-                            weatherStep = 0;
-                            weatherRetryCount = 0;
-                            weatherBackoffEnd = now + WEATHER_BACKOFF_MS;
-                            Serial.printf("[Main] 天气获取退避5分钟\n");
-                        }
-                    }
-                    break;
-            }
-        }
-    } else if (now - lastWeatherUpdate >= WEATHER_UPDATE_INTERVAL) {
-        lastWeatherUpdate = now;
-        weatherStep = 1;
-        weatherRetryCount = 0;
-        weatherBackoffEnd = 0;
-    }
-}
-
-void handleSensors(unsigned long now) {
-    if (now - lastTempRead >= 5000) {
-        lastTempRead = now;
-        aht20Bmp280Sensor.update();
-    }
-}
-
-void handleHistory(unsigned long now) {
-    if (!timeSynced) {
-        return;
-    }
-
-    if (lastHistorySave == 0) {
-        if (timeManager.getYear() > 2020) {
-            int currentMinute = timeManager.getHour() * 60 + timeManager.getMinute();
-            int nextSlotMinute = ((currentMinute / 10) + 1) * 10;
-            int delayToNextSlot = (nextSlotMinute - currentMinute) * 60000;
-            lastHistorySave = millis() - (unsigned long)(600000 - delayToNextSlot);
-            Serial.printf("[History] NTP同步成功，历史保存首次对齐到 %02d:%02d（%d 分钟后）\n",
-                          (nextSlotMinute / 60) % 24, nextSlotMinute % 60,
-                          delayToNextSlot / 60000);
-        } else {
-            lastHistorySave = millis();
-        }
-        return;
-    }
-
-    if (now - lastHistorySave >= 600000) {
-        lastHistorySave = now;
-        if (aht20Bmp280Sensor.isValid()) {
-            pHistoryPage->addRecord(
-                aht20Bmp280Sensor.getTemperature(),
-                aht20Bmp280Sensor.getHumidity(),
-                aht20Bmp280Sensor.getPressure()
-            );
-            Serial.printf("[History] 保存传感器数据: 温度=%.1f°C 湿度=%.1f%% 气压=%.1fhPa\n",
-                aht20Bmp280Sensor.getTemperature(),
-                aht20Bmp280Sensor.getHumidity(),
-                aht20Bmp280Sensor.getPressure());
-
-            if (pPressurePage->checkAlert()) {
-                Serial.println("[Alert] 气压警告触发，自动切换到气压页面！");
-                pageManager.switchTo(PageManager::PAGE_PRESSURE);
-            }
-        }
     }
 }
 
