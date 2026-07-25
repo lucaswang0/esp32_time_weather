@@ -10,7 +10,7 @@ StreamingPlayerPage::StreamingPlayerPage(DisplayManager& display) : _display(dis
     _lastFpsUpdateTime = millis();
     _frameCount = 0;
     _currentFps = 0.0f;
-    strcpy(_fpsText, "FPS: 0.0");
+    strcpy(_fpsText, "帧率:0.0");
 }
 
 StreamingPlayerPage::~StreamingPlayerPage() {
@@ -33,7 +33,7 @@ void StreamingPlayerPage::onEnter() {
     _lastFpsUpdateTime = millis();
     _frameCount = 0;
     _currentFps = 0.0f;
-    strcpy(_fpsText, "FPS: 0.0");
+    strcpy(_fpsText, "帧率:0.0");
     
     if (!_rawBuf) {
         _rawBuf = new uint8_t[BUFFER_SIZE];
@@ -70,16 +70,16 @@ void StreamingPlayerPage::drawConnectingScreen() {
     tft.loadFont(font_small_20);
     // tft.setTextDatum(TC_DATUM);  // 顶部居中
     tft.setTextColor(TFT_WHITE);
-    tft.drawString("Connecting to the streaming server...", 2, 60);
+    tft.drawString("正在连接流媒体服务器...", 2, 60);
 
     tft.setTextColor(COLOR_GRAY_DARK);
     tft.drawString(SERVER_HOST, 160, 95);
     char portStr[16];
-    snprintf(portStr, sizeof(portStr), "Port: %d", SERVER_PORT);
+    snprintf(portStr, sizeof(portStr), "端口:%d", SERVER_PORT);
     tft.drawString(portStr, 160, 115);
     
     tft.setTextColor(COLOR_GRAY_MID);
-    tft.drawString("Touch to return", 160, 146);
+    tft.drawString("触摸返回", 160, 146);
     
     tft.unloadFont();
 }
@@ -94,7 +94,7 @@ void StreamingPlayerPage::drawErrorScreen(const char* msg) {
     tft.drawString(msg, 160, 70);
     
     tft.setTextColor(COLOR_GRAY_MID);
-    tft.drawString("Double tap to retry", 160, 146);
+    tft.drawString("双击重试", 160, 146);
     
     tft.unloadFont();
 }
@@ -162,7 +162,7 @@ void StreamingPlayerPage::update() {
             
             if (_connectionFailureCount >= MAX_CONNECTION_FAILURES) {
                 _state = ST_ERROR;
-                drawErrorScreen("Failed to connect to server");
+                drawErrorScreen("无法连接服务器");
             }
         }
         return;
@@ -255,7 +255,7 @@ void StreamingPlayerPage::update() {
                         _currentFps = _frameCount * 1000.0f / (n - _lastFpsUpdateTime);
                         _frameCount = 0;
                         _lastFpsUpdateTime = n;
-                        snprintf(_fpsText, sizeof(_fpsText), "FPS: %.1f", _currentFps);
+                        snprintf(_fpsText, sizeof(_fpsText), "帧率:%.1f", _currentFps);
                     }
                     if (_frameW > 0 && _frameH > 0 && _frameX < 320 && _frameY < 170) {
                         tft.setSwapBytes(true);

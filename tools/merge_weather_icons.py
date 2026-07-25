@@ -6,7 +6,7 @@
 使用方法:
     python merge_weather_icons.py                    # 默认参数运行
     python merge_weather_icons.py --input ./weather_icons    # 指定输入目录
-    python merge_weather_icons.py --output ./include/weather_icons.h  # 指定输出文件
+    python merge_weather_icons.py --output ./weather_icons.h  # 指定输出文件
 """
 
 import os
@@ -115,7 +115,7 @@ def merge_headers(input_dir, output_path):
 def main():
     parser = argparse.ArgumentParser(description='合并天气图标头文件')
     parser.add_argument('--input', help='图标头文件输入目录', default='weather_icons')
-    parser.add_argument('--output', help='合并后输出文件路径', default='include/weather_icons.h')
+    parser.add_argument('--output', help='合并后输出文件路径', default='weather_icons.h')
     
     args = parser.parse_args()
     

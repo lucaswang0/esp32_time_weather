@@ -18,17 +18,35 @@ void APModePage::onEnter() {
 
 void APModePage::onExit() {
     Serial.println("[APModePage] onExit");
+    // 方案 A+D 配套: 退出 AP 页面时主动停止 AP 模式（不保存配置则关闭 AP）
+    if (_wifi.isAPStarted()) {
+        Serial.println("[APModePage] Stopping AP mode on exit");
+        _wifi.stopAPMode();
+    }
 }
 
 void APModePage::update() {
     auto& tft = _display.getTFT();
     unsigned long now = millis();
-    
+
     if (now - _lastDrawTime < 1000) {
         return;
     }
     _lastDrawTime = now;
-    
+
+    // 方案 D: 倒计时 0 主动停止 AP 模式
+    // WiFiManager::checkAPTimeout 只在 WiFi 已连接 + maintainConnection 时被调用,
+    // AP 模式下永远不会触发, 所以这里手动检查并停止 AP
+    if (!_wifi.isAPStarted() || getRemainingSeconds() == 0) {
+        if (_wifi.isAPStarted()) {
+            Serial.println("[APModePage] Countdown ended, stopping AP mode");
+            _wifi.stopAPMode();
+            // TaskManager 会在下一轮 WiFi 检查时发现 AP 关闭 + 当前在 AP_MODE
+            // → 自动 switchTo(PAGE_TEMP)
+        }
+        return;  // 倒计时 0 后不再画 00:00
+    }
+
     updateCountdown(tft);
 }
 

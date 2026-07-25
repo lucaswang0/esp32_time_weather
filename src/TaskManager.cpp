@@ -52,10 +52,12 @@ void TaskManager::begin() {
     );
     
     // 天气更新任务 - 1小时间隔（但包含多个步骤）
+    // 栈 16384 (16KB) 修复 Store access fault: HTTPS 期间 mbedTLS 握手 + JWT 生成
+    // + 多 String 局部变量 累计栈使用峰值 6-8KB，8KB 容易在临界状态溢出踩坏其他内存
     xTaskCreatePinnedToCore(
         taskWeatherWrapper,
         "TaskWeather",
-        8192,
+        16384,       // 8KB → 16KB（HTTPS 安全裕量）
         this,
         4,
         &_taskWeather,
@@ -264,10 +266,21 @@ void TaskManager::taskTimeSync() {
 void TaskManager::taskWeather() {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     const TickType_t xFrequency = pdMS_TO_TICKS(1000);
-    
+
     for (;;) {
         unsigned long now = millis();
-        
+
+        // HWM 监控辅助：打印任务栈剩余最小值
+        // 正常情况: HWM > 12KB；告警: HWM < 4KB (栈快吃完)
+        auto printHwm = [](const char* stage) {
+            UBaseType_t hwm = uxTaskGetStackHighWaterMark(NULL);
+            if (hwm < 4096) {
+                Serial.printf("[TaskWeather] ⚠️  HWM after %s: %u bytes free (栈告警 < 4KB)\n", stage, hwm);
+            } else {
+                Serial.printf("[TaskWeather] HWM after %s: %u bytes free\n", stage, hwm);
+            }
+        };
+
         // 阶段一：IP定位（仅获取一次，成功后不再获取）
         if (!_ipLocationDone && _wifiManager.isConnected()) {
             Serial.println("[TaskWeather] 阶段一: 通过IP获取定位");
@@ -277,10 +290,11 @@ void TaskManager::taskWeather() {
             } else {
                 Serial.println("[TaskWeather] IP定位失败，下次任务时重试");
             }
+            printHwm("stage1 IP-location");
             vTaskDelayUntil(&xLastWakeTime, xFrequency);
             continue;
         }
-        
+
         // 阶段二：城市信息（IP定位成功后仅获取一次）
         if (!_cityInfoDone && _wifiManager.isConnected()) {
             Serial.println("[TaskWeather] 阶段二: 获取城市信息");
@@ -290,14 +304,15 @@ void TaskManager::taskWeather() {
             } else {
                 Serial.println("[TaskWeather] 城市信息获取失败，下次任务时重试");
             }
+            printHwm("stage2 city-info");
             vTaskDelayUntil(&xLastWakeTime, xFrequency);
             continue;
         }
-        
+
         // 阶段三：获取当前天气（成功后需间隔10分钟以上）
         bool currentWeatherEmpty = (_weatherManager.getTemperature().length() == 0 ||
                                    _weatherManager.getWeatherText().length() == 0);
-        
+
         if (currentWeatherEmpty || now - _lastCurrentWeatherUpdate >= CURRENT_WEATHER_MIN_INTERVAL_MS) {
             if (_wifiManager.isConnected()) {
                 Serial.println("[TaskWeather] 阶段三: 获取当前天气");
@@ -307,12 +322,13 @@ void TaskManager::taskWeather() {
                 } else {
                     Serial.println("[TaskWeather] 当前天气获取失败");
                 }
+                printHwm("stage3 current-weather");
             }
         }
-        
+
         // 阶段四：获取天气预报（成功后需间隔1小时以上）
         bool forecastEmpty = (_weatherManager.getForecast(0).date.length() == 0);
-        
+
         if (forecastEmpty || now - _lastForecastUpdate >= FORECAST_MIN_INTERVAL_MS) {
             if (_wifiManager.isConnected()) {
                 Serial.println("[TaskWeather] 阶段四: 获取天气预报");
@@ -322,9 +338,10 @@ void TaskManager::taskWeather() {
                 } else {
                     Serial.println("[TaskWeather] 天气预报获取失败");
                 }
+                printHwm("stage4 forecast");
             }
         }
-        
+
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }
 }

@@ -38,6 +38,13 @@ void PageManager::begin(PageMode initialMode) {
 
 void PageManager::next() {
     PageMode startMode = _current;
+    // 方案 A: 从 AP_MODE 短按 → 直接跳到 TempPage（退出 AP 配置）
+    if (_current == PAGE_AP_MODE) {
+        if (_pages[PAGE_TEMP] != nullptr) {
+            switchTo(PAGE_TEMP);
+        }
+        return;
+    }
     PageMode nextMode = (PageMode)((_current + 1) % PAGE_COUNT);
     while ((_pages[nextMode] == nullptr || nextMode == PAGE_AP_MODE) && nextMode != startMode) {
         nextMode = (PageMode)((nextMode + 1) % PAGE_COUNT);
@@ -50,6 +57,13 @@ void PageManager::next() {
 
 void PageManager::prev() {
     PageMode startMode = _current;
+    // 方案 A: 从 AP_MODE 双击 → 直接跳到 TempPage（退出 AP 配置）
+    if (_current == PAGE_AP_MODE) {
+        if (_pages[PAGE_TEMP] != nullptr) {
+            switchTo(PAGE_TEMP);
+        }
+        return;
+    }
     PageMode prevMode = (PageMode)((_current + PAGE_COUNT - 1) % PAGE_COUNT);
     while ((_pages[prevMode] == nullptr || prevMode == PAGE_AP_MODE) && prevMode != startMode) {
         prevMode = (PageMode)((prevMode + PAGE_COUNT - 1) % PAGE_COUNT);

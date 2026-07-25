@@ -297,7 +297,7 @@ int32_t pngSeek(PNGFILE *page, int32_t position) {
 int pngDraw(PNGDRAW *pDraw) {
     if (!pngTft || !pngObj) return 0;
     uint16_t lineBuffer[MAX_IMAGE_WIDTH];
-    pngObj->getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_BIG_ENDIAN, 0xFFFFFFFF);
+    pngObj->getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0xFFFFFFFF);
 
     if (pngIsBackground) {
         int y = pngYpos + pDraw->y;

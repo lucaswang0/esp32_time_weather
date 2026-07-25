@@ -227,7 +227,7 @@ void PressurePage::drawPage() {
     struct tm *tm_info = localtime(&now);
     char time_str[16];
     strftime(time_str, sizeof(time_str), "%H:%M", tm_info);
-    _display.drawTextWithTransparentBgFont(time_str, 280, 6, COLOR_WHITE, font_small_20);
+    _display.drawTextWithTransparentBgFont(time_str, 270, 6, COLOR_WHITE, font_small_20);
 
     // 标题下方分隔线
     tft.drawFastHLine(0, 18, 320, TFT_RED);

@@ -280,7 +280,7 @@ void HistoryPage::drawWeatherGraph() {
             int x_pos = graph_x + (graph_w * i) / 6;
             char label[4];
             sprintf(label, "%d", hour);
-            _display.drawTextWithTransparentBg(label, x_pos - 8, graph_y + graph_h + 2, COLOR_GRID);
+            _display.drawTextWithTransparentBg(label, x_pos - 8, graph_y + graph_h + 2, COLOR_TEXT);
         }
     } else {
         // 默认显示 0~24
@@ -288,7 +288,7 @@ void HistoryPage::drawWeatherGraph() {
             int x_pos = graph_x + (h * graph_w) / 24;
             char label[4];
             sprintf(label, "%d", h);
-            _display.drawTextWithTransparentBg(label, x_pos - 8, graph_y + graph_h + 2, COLOR_GRID);
+            _display.drawTextWithTransparentBg(label, x_pos - 8, graph_y + graph_h + 2, COLOR_TEXT);
         }
     }
 
