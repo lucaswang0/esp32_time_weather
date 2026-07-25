@@ -30,6 +30,7 @@ struct DailyForecast {
     String windScale; // 风力等级
     String sunrise;   // 日出时间
     String sunset;    // 日落时间
+    String moonPhaseIcon; // 月相图标代码 (800-807)
 };
 
 class WeatherManager {

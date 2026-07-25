@@ -39,6 +39,7 @@ void TempPage::onEnter() {
     lastForecastWeatherCode = "";
     lastSunrise = "";
     lastSunset = "";
+    lastMoonPhaseIcon = "";
     lastIndoorHumidity = -1000.0f;
     lastIndoorHumidityValid = false;
     lastRSSI = -1000;
@@ -57,7 +58,7 @@ void TempPage::update() {
     const DailyForecast& todayForecast = _weather.getForecast(0);
     drawForecast(todayForecast.tempMin, todayForecast.tempMax, todayForecast.textDay.length() > 0 ? _weather.getWeatherCode() : "");
 
-    drawSunMoon(todayForecast.sunrise, todayForecast.sunset);
+    drawSunMoon(todayForecast.sunrise, todayForecast.sunset, todayForecast.moonPhaseIcon);
 
     if (forecastValid && _weather.getTemperature().length() > 0) {
         float temp = _weather.getTemperature().toFloat();
@@ -160,18 +161,27 @@ void TempPage::drawForecast(const String& tempMin, const String& tempMax, const 
     _display.drawTextWithTransparentBgFont(forecastStr.c_str(), 200, 95, COLOR_WHITE, font_medium_32);
 }
 
-void TempPage::drawSunMoon(const String& sunrise, const String& sunset) {
-    if (lastSunrise == sunrise && lastSunset == sunset) {
+void TempPage::drawSunMoon(const String& sunrise, const String& sunset, const String& moonPhaseIcon) {
+    if (lastSunrise == sunrise && lastSunset == sunset && lastMoonPhaseIcon == moonPhaseIcon) {
         return;
     }
     lastSunrise = sunrise;
     lastSunset = sunset;
+    lastMoonPhaseIcon = moonPhaseIcon;
 
     String sunStr = sunrise.length() > 0 ? ("日出:" + sunrise) : "日出--";
     _display.drawTextWithTransparentBg(sunStr.c_str(), 0, 105, COLOR_WHITE);
 
     String moonStr = sunset.length() > 0 ? ("日落:" + sunset) : "日落--";
     _display.drawTextWithTransparentBg(moonStr.c_str(), 0, 126, COLOR_WHITE);
+
+    // 月相图标：日出日落右边，与"日出"行垂直居中
+    if (moonPhaseIcon.length() > 0) {
+        // 复用 drawWeatherIcon 全部默认参数：/icon_<code>.png，失败回退 /icon_999.png
+        // 32×32 图标（与 weather icon 64×64 区分），位置 (95, 100)
+        // 实际区域 95-127 / 100-132，不与 (0,105) 日出文字、(0,126) 日落文字、(225,126) 体感温度冲突
+        _display.drawWeatherIcon(98, 105, moonPhaseIcon);
+    }
 }
 
 void TempPage::drawIndoorTemp(float temp, bool valid) {

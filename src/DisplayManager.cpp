@@ -320,81 +320,64 @@ int pngDraw(PNGDRAW *pDraw) {
     return 1;
 }
 
-void DisplayManager::drawWeatherIcon(int x, int y, const String& weatherCodeStr) {
-    if (weatherCodeStr.isEmpty()) {
-        Serial.println("[Display] 天气代码为空");
+void DisplayManager::drawWeatherIcon(int x, int y, const String& codeStr,
+                                      const char* pathPrefix, const char* fallback) {
+    // 通用 PNG 图标绘制：路径前缀 + code + ".png"，失败时回退到 fallback（nullptr = 不回退）
+    // 现有默认参数兼容原 drawWeatherIcon 行为："/icon_" + code + ".png" → 回退 "/icon_100.png"
+    // 月相调用：pathPrefix="/moon_icon_", fallback=nullptr → 失败时空着即可
+    if (codeStr.isEmpty()) {
+        Serial.println("[Display] 图标代码为空");
         return;
     }
-    
-    int weatherCode = weatherCodeStr.toInt();
-    Serial.printf("[Display] 天气代码: %s -> %d\n", weatherCodeStr.c_str(), weatherCode);
-    
-    String iconFile = "/icon_" + String(weatherCode) + ".png";
-    
+
+    String iconFile = String(pathPrefix) + codeStr + ".png";
+    Serial.printf("[Display] 图标代码: %s, 文件: %s\n", codeStr.c_str(), iconFile.c_str());
+
     pngTft = &tft;
     pngObj = &png;
     pngXpos = x;
     pngYpos = y;
     pngIsBackground = false;
-    
+
     int16_t rc = png.open(iconFile.c_str(), pngOpen, pngClose, pngRead, pngSeek, pngDraw);
-    if (rc == PNG_SUCCESS) {
-        tft.startWrite();
-        Serial.printf("[PNG] Image specs: (%d x %d), %d bpp\n", png.getWidth(), png.getHeight(), png.getBpp());
-        
-        if (bgSource != nullptr) {
-            tft.setSwapBytes(false);
-            static uint16_t lineBuf[SCREEN_WIDTH];
-            for (int row = 0; row < png.getHeight(); row++) {
-                int bgY = y + row;
-                if (bgY >= 0 && bgY < SCREEN_HEIGHT) {
-                    int bgStartIndex = bgY * SCREEN_WIDTH + x;
-                    for (int col = 0; col < png.getWidth() && x + col < SCREEN_WIDTH; col++) {
-                        uint16_t pixel = pgm_read_word(&bgSource[bgStartIndex + col]);
-                        lineBuf[col] = (pixel >> 8) | ((pixel & 0xFF) << 8);
-                    }
-                    tft.pushImage(x, bgY, png.getWidth(), 1, lineBuf);
-                }
-            }
-            tft.setSwapBytes(true);
+    if (rc != PNG_SUCCESS) {
+        if (fallback == nullptr) {
+            Serial.printf("[PNG] %s 打开失败: %d, 无回退配置，跳过\n", iconFile.c_str(), rc);
+            return;
         }
-        
-        rc = png.decode(NULL, 0);
-        tft.endWrite();
-        png.close();
-    } else {
-        Serial.printf("[PNG] Open failed: %d, trying default icon\n", rc);
-        
-        String defaultFile = "/icon_100.png";
-        rc = png.open(defaultFile.c_str(), pngOpen, pngClose, pngRead, pngSeek, pngDraw);
-        if (rc == PNG_SUCCESS) {
-            tft.startWrite();
-            Serial.printf("[PNG] Default icon specs: (%d x %d), %d bpp\n", png.getWidth(), png.getHeight(), png.getBpp());
-            
-            if (bgSource != nullptr) {
-                tft.setSwapBytes(false);
-                static uint16_t lineBuf[SCREEN_WIDTH];
-                for (int row = 0; row < png.getHeight(); row++) {
-                    int bgY = y + row;
-                    if (bgY >= 0 && bgY < SCREEN_HEIGHT) {
-                        int bgStartIndex = bgY * SCREEN_WIDTH + x;
-                        for (int col = 0; col < png.getWidth() && x + col < SCREEN_WIDTH; col++) {
-                            uint16_t pixel = pgm_read_word(&bgSource[bgStartIndex + col]);
-                            lineBuf[col] = (pixel >> 8) | ((pixel & 0xFF) << 8);
-                        }
-                        tft.pushImage(x, bgY, png.getWidth(), 1, lineBuf);
-                    }
-                }
-                tft.setSwapBytes(true);
-            }
-            
-            rc = png.decode(NULL, 0);
-            tft.endWrite();
-            png.close();
-        } else {
-            Serial.println("[PNG] Default icon also failed");
+        Serial.printf("[PNG] %s 打开失败: %d, 尝试回退 %s\n", iconFile.c_str(), rc, fallback);
+        iconFile = String(fallback);
+        rc = png.open(iconFile.c_str(), pngOpen, pngClose, pngRead, pngSeek, pngDraw);
+        if (rc != PNG_SUCCESS) {
+            Serial.printf("[PNG] 回退 %s 也失败: %d\n", fallback, rc);
+            return;
         }
     }
+
+    tft.startWrite();
+    Serial.printf("[PNG] Image specs: (%d x %d), %d bpp\n", png.getWidth(), png.getHeight(), png.getBpp());
+
+    // 保护背景图：先把图标区域的当前背景图推上去（避免擦除背景图案）
+    if (bgSource != nullptr) {
+        tft.setSwapBytes(false);
+        static uint16_t lineBuf[SCREEN_WIDTH];
+        for (int row = 0; row < png.getHeight(); row++) {
+            int bgY = y + row;
+            if (bgY >= 0 && bgY < SCREEN_HEIGHT) {
+                int bgStartIndex = bgY * SCREEN_WIDTH + x;
+                for (int col = 0; col < png.getWidth() && x + col < SCREEN_WIDTH; col++) {
+                    uint16_t pixel = pgm_read_word(&bgSource[bgStartIndex + col]);
+                    lineBuf[col] = (pixel >> 8) | ((pixel & 0xFF) << 8);
+                }
+                tft.pushImage(x, bgY, png.getWidth(), 1, lineBuf);
+            }
+        }
+        tft.setSwapBytes(true);
+    }
+
+    rc = png.decode(NULL, 0);
+    tft.endWrite();
+    png.close();
 }
 
 bool DisplayManager::loadPNGWithBuffer(String filename) {

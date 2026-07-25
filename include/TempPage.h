@@ -47,6 +47,7 @@ private:
     String lastForecastWeatherCode = "";
     String lastSunrise = "";
     String lastSunset = "";
+    String lastMoonPhaseIcon = "";
     float lastIndoorHumidity = -1000.0f;
     bool lastIndoorHumidityValid = false;
     int lastRSSI = -1000;
@@ -58,7 +59,7 @@ private:
     void drawTime(int year, int month, int day, int hour, int minute, int second, int weekday);
     void drawWeather(const String& city, const String& weather, const String& temp, const String& weatherCode, bool forecastValid);
     void drawForecast(const String& tempMin, const String& tempMax, const String& weatherCode);
-    void drawSunMoon(const String& sunrise, const String& sunset);
+    void drawSunMoon(const String& sunrise, const String& sunset, const String& moonPhaseIcon);
     void drawIndoorTemp(float temp, bool valid);
     void drawIndoorHumidity(float humidity, bool valid);
     void drawWiFiStatus(bool connected);

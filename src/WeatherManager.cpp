@@ -5,6 +5,7 @@
 #include "sodium.h"
 #include <string.h>
 #include "ArduinoUZlib.h"
+#include <freertos/FreeRTOS.h>   // 【优化#2】vTaskDelay/pdMS_TO_TICKS
 
 
 
@@ -169,24 +170,32 @@ bool WeatherManager::fetchCurrentWeather() {
     
     const int maxRetries = 3;
     for (int retry = 0; retry < maxRetries; retry++) {
+        // 【优化#3】请求前检查堆内存（避免 SSL 内部 malloc 失败）
+        if (ESP.getFreeHeap() < 25 * 1024) {
+            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃本次请求\n", ESP.getFreeHeap());
+            return false;
+        }
+
         WiFiClientSecure weatherClient;
         HTTPClient https;
-        
+
         weatherClient.setInsecure();
-        weatherClient.setTimeout(5000);
-        
+        weatherClient.setTimeout(5);
+        // 缩短握手超时（默认 30s 太长），失败时更快释放资源
+        weatherClient.setHandshakeTimeout(5000);
+
         https.begin(weatherClient, url);
         https.addHeader("Authorization", "Bearer " + token);
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
-        
+
         Serial.printf("[Weather] 发送HTTP请求 (第%d/%d次)...\n", retry + 1, maxRetries);
         int httpCode = https.GET();
-        
+
         if (httpCode == HTTP_CODE_OK) {
             int len = https.getSize();
             Serial.println("[Weather] HTTP请求成功，数据大小: " + String(len) + " 字节");
-            
+
             if (len > 0 && len < 4096) {
                 int bytesRead = https.getStream().readBytes(compressedData, len);
                 Serial.println("[Weather] 实际读取字节数: " + String(bytesRead));
@@ -295,10 +304,12 @@ bool WeatherManager::fetchCurrentWeather() {
         }
         
         if (retry < maxRetries - 1) {
-            Serial.printf("[Weather] 第%d次失败，跳过重试...\n", retry + 1);
+            // 【优化#2】失败后延时，给 FreeRTOS 回收堆碎片时间
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            Serial.printf("[Weather] 第%d次失败，2秒后重试...\n", retry + 1);
         }
     }
-    
+
     Serial.println("[Weather] 请求失败");
     restoreBgCacheIfNeeded();
     return false;
@@ -327,37 +338,44 @@ bool WeatherManager::fetch3DayForecast() {
     
     const int maxRetries = 3;
     for (int retry = 0; retry < maxRetries; retry++) {
+        // 【优化#3】请求前检查堆内存
+        if (ESP.getFreeHeap() < 25 * 1024) {
+            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃本次请求\n", ESP.getFreeHeap());
+            return false;
+        }
+
         WiFiClientSecure weatherClient;
         HTTPClient https;
-        
+
         weatherClient.setInsecure();
-        weatherClient.setTimeout(5000);
-        
+        weatherClient.setTimeout(5);
+        weatherClient.setHandshakeTimeout(5000);
+
         https.begin(weatherClient, url);
         https.addHeader("Authorization", "Bearer " + token);
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
-        
+
         Serial.printf("[Weather] 发送HTTP请求 (第%d/%d次)...\n", retry + 1, maxRetries);
         int httpCode = https.GET();
-        
+
         if (httpCode == HTTP_CODE_OK) {
             int len = https.getSize();
-            
+
             if (len > 0 && len < 4096) {
                 int bytesRead = https.getStream().readBytes(compressedData, len);
-                
+
                 memset(decompressed, 0, sizeof(decompressed));
                 size_t decompressedLen = sizeof(decompressed) - 1;
-                
+
                 bool isGzip = (bytesRead >= 2 && compressedData[0] == 0x1F && compressedData[1] == 0x8B);
-                
+
                 if (isGzip) {
                     if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
                         Serial.println("[Weather] 完整JSON响应:");
                         Serial.println(decompressed);
                         Serial.println();
-                        
+
                         doc2048.clear();
                         DeserializationError error = deserializeJson(doc2048, decompressed);
                         
@@ -389,15 +407,17 @@ bool WeatherManager::fetch3DayForecast() {
                             forecasts[i].windScale = day["windScaleDay"].as<String>();
                             forecasts[i].sunrise = day["sunrise"].as<String>();
                             forecasts[i].sunset = day["sunset"].as<String>();
+                            forecasts[i].moonPhaseIcon = day["moonPhaseIcon"].as<String>();
                             
-                            Serial.printf("[Weather] 第%d天: %s %s %s~%s°C 日出:%s 日落:%s\n",
+                            Serial.printf("[Weather] 第%d天: %s %s %s~%s°C 日出:%s 日落:%s 月相:%s\n",
                                          i + 1,
                                          forecasts[i].date.c_str(),
                                          forecasts[i].textDay.c_str(),
                                          forecasts[i].tempMin.c_str(),
                                          forecasts[i].tempMax.c_str(),
                                          forecasts[i].sunrise.c_str(),
-                                         forecasts[i].sunset.c_str());
+                                         forecasts[i].sunset.c_str(),
+                                         forecasts[i].moonPhaseIcon.c_str());
                         }
                         
                         https.end();
@@ -431,6 +451,7 @@ bool WeatherManager::fetch3DayForecast() {
                                 forecasts[i].windScale = day["windScaleDay"].as<String>();
                                 forecasts[i].sunrise = day["sunrise"].as<String>();
                                 forecasts[i].sunset = day["sunset"].as<String>();
+                                forecasts[i].moonPhaseIcon = day["moonPhaseIcon"].as<String>();
                             }
                             https.end();
                             return true;
@@ -445,10 +466,12 @@ bool WeatherManager::fetch3DayForecast() {
         }
         
         if (retry < maxRetries - 1) {
-            Serial.printf("[Weather] 第%d次失败，跳过重试...\n", retry + 1);
+            // 【优化#2】失败后延时
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            Serial.printf("[Weather] 第%d次失败，2秒后重试...\n", retry + 1);
         }
     }
-    
+
     Serial.println("[Weather] 请求失败");
     return false;
 }
@@ -475,39 +498,46 @@ bool WeatherManager::fetchCityInfo() {
     Serial.println("[Weather] 请求URL: " + url);
     
     const int maxRetries = 3;
-    
+
     for (int retry = 0; retry < maxRetries; retry++) {
+        // 【优化#3】请求前检查堆内存
+        if (ESP.getFreeHeap() < 25 * 1024) {
+            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃本次请求\n", ESP.getFreeHeap());
+            return false;
+        }
+
         WiFiClientSecure weatherClient;
         HTTPClient https;
-        
+
         weatherClient.setInsecure();
-        weatherClient.setTimeout(5000);
-        
+        weatherClient.setTimeout(5);
+        weatherClient.setHandshakeTimeout(5000);
+
         https.begin(weatherClient, url);
         https.addHeader("Authorization", "Bearer " + token);
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
-        
+
         Serial.printf("[Weather] 发送HTTP请求 (第%d/%d次)...\n", retry + 1, maxRetries);
         int httpCode = https.GET();
-        
+
         if (httpCode == HTTP_CODE_OK) {
             int len = https.getSize();
             Serial.println("[Weather] HTTP请求成功，数据大小: " + String(len) + " 字节");
-            
+
             if (len > 0 && len < 4096) {
                 int bytesRead = https.getStream().readBytes(compressedData, len);
-                
+
                 memset(decompressed, 0, sizeof(decompressed));
                 size_t decompressedLen = sizeof(decompressed) - 1;
-                
+
                 bool isGzip = (bytesRead >= 2 && compressedData[0] == 0x1F && compressedData[1] == 0x8B);
                 Serial.println("[Weather] 是否gzip压缩: " + String(isGzip ? "是" : "否"));
-                
+
                 if (isGzip) {
                     if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
                         Serial.println("[Weather] 解压后数据大小: " + String(decompressedLen) + " 字节");
-                        
+
                         doc1024.clear();
                         DeserializationError error = deserializeJson(doc1024, decompressed);
                         
@@ -576,10 +606,12 @@ bool WeatherManager::fetchCityInfo() {
         }
         
         if (retry < maxRetries - 1) {
-            Serial.printf("[Weather] 第%d次失败，跳过重试...\n", retry + 1);
+            // 【优化#2】失败后延时
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            Serial.printf("[Weather] 第%d次失败，2秒后重试...\n", retry + 1);
         }
     }
-    
+
     Serial.println("[Weather] 请求失败");
     restoreBgCacheIfNeeded();
     return false;
@@ -651,11 +683,20 @@ bool WeatherManager::fetchLocationByIP() {
         // QWeather 地理查询：location 接受 "lon,lat"（逗号需 URL 编码为 %2C）
         String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + lon + "%2C" + lat;
         Serial.println("[Weather] 和风天气地理查询: " + geoUrl);
-        
+
+        // 【优化#3】请求前检查堆内存
+        if (ESP.getFreeHeap() < 25 * 1024) {
+            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃地理查询\n", ESP.getFreeHeap());
+            http.end();
+            return false;
+        }
+
         WiFiClientSecure geoClient;
         HTTPClient https;
 
         geoClient.setInsecure();
+        geoClient.setTimeout(5);
+        geoClient.setHandshakeTimeout(5000);
         https.begin(geoClient, geoUrl);
         https.addHeader("Authorization", "Bearer " + token);
         https.addHeader("Accept-Encoding", "gzip, deflate");

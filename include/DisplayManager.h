@@ -67,7 +67,9 @@ public:
     
     bool loadPNGWithBuffer(String filename);
     
-    void drawWeatherIcon(int x, int y, const String& weatherCode);
+    void drawWeatherIcon(int x, int y, const String& code,
+                         const char* pathPrefix = "/icon_",
+                         const char* fallback = "/icon_999.png");
 
     static const uint16_t* getBackgroundByIndex(int index) {
         switch (index) {
