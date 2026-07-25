@@ -167,12 +167,16 @@ bool WeatherManager::fetchCurrentWeather() {
 
     Serial.println("\n========== 获取当前天气 ==========");
     Serial.println("[Weather] 请求URL: " + url);
-    
+
     const int maxRetries = 3;
     for (int retry = 0; retry < maxRetries; retry++) {
-        // 【优化#3】请求前检查堆内存（避免 SSL 内部 malloc 失败）
-        if (ESP.getFreeHeap() < 25 * 1024) {
-            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃本次请求\n", ESP.getFreeHeap());
+        // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
+        // mbedTLS 握手需要 ~16KB 连续内存，HTTP 响应 buffer 还要 ~4KB，合计 > 20KB
+        // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
+        size_t maxAlloc = ESP.getMaxAllocHeap();
+        if (maxAlloc < 24 * 1024) {
+            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求\n",
+                          maxAlloc, ESP.getFreeHeap());
             return false;
         }
 
@@ -304,9 +308,21 @@ bool WeatherManager::fetchCurrentWeather() {
         }
         
         if (retry < maxRetries - 1) {
+            https.end();
             // 【优化#2】失败后延时，给 FreeRTOS 回收堆碎片时间
-            vTaskDelay(pdMS_TO_TICKS(2000));
-            Serial.printf("[Weather] 第%d次失败，2秒后重试...\n", retry + 1);
+            // 2s 太短，mbedTLS 内部 buffer 还没完全释放；5s 给足够时间回收
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
+                          retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
+            // 【优化#6】第二次失败时延长等待到 30s, 让 mbedTLS 内部状态自然释放
+            // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
+            // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
+            // 改用延长延迟, 让 FreeRTOS 调度器给 WiFi 任务时间释放碎片
+            if (retry == 1) {
+                Serial.println("[Weather] 延长等待 30s, 让系统自然回收堆碎片...");
+                vTaskDelay(pdMS_TO_TICKS(30000));  // 30s
+            }
         }
     }
 
@@ -338,9 +354,13 @@ bool WeatherManager::fetch3DayForecast() {
     
     const int maxRetries = 3;
     for (int retry = 0; retry < maxRetries; retry++) {
-        // 【优化#3】请求前检查堆内存
-        if (ESP.getFreeHeap() < 25 * 1024) {
-            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃本次请求\n", ESP.getFreeHeap());
+        // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
+        // mbedTLS 握手需要 ~16KB 连续内存，HTTP 响应 buffer 还要 ~4KB，合计 > 20KB
+        // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
+        size_t maxAlloc = ESP.getMaxAllocHeap();
+        if (maxAlloc < 24 * 1024) {
+            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求\n",
+                          maxAlloc, ESP.getFreeHeap());
             return false;
         }
 
@@ -397,7 +417,7 @@ bool WeatherManager::fetch3DayForecast() {
                         
                         for (int i = 0; i < dailyArray.size() && i < 3; i++) {
                             JsonObject day = dailyArray[i];
-                            
+
                             forecasts[i].date = day["fxDate"].as<String>();
                             forecasts[i].textDay = day["textDay"].as<String>();
                             forecasts[i].tempMin = day["tempMin"].as<String>();
@@ -408,7 +428,7 @@ bool WeatherManager::fetch3DayForecast() {
                             forecasts[i].sunrise = day["sunrise"].as<String>();
                             forecasts[i].sunset = day["sunset"].as<String>();
                             forecasts[i].moonPhaseIcon = day["moonPhaseIcon"].as<String>();
-                            
+
                             Serial.printf("[Weather] 第%d天: %s %s %s~%s°C 日出:%s 日落:%s 月相:%s\n",
                                          i + 1,
                                          forecasts[i].date.c_str(),
@@ -466,9 +486,21 @@ bool WeatherManager::fetch3DayForecast() {
         }
         
         if (retry < maxRetries - 1) {
-            // 【优化#2】失败后延时
-            vTaskDelay(pdMS_TO_TICKS(2000));
-            Serial.printf("[Weather] 第%d次失败，2秒后重试...\n", retry + 1);
+            https.end();
+            // 【优化#2】失败后延时，给 FreeRTOS 回收堆碎片时间
+            // 2s 太短，mbedTLS 内部 buffer 还没完全释放；5s 给足够时间回收
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
+                          retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
+            // 【优化#6】第二次失败时延长等待到 30s, 让 mbedTLS 内部状态自然释放
+            // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
+            // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
+            // 改用延长延迟, 让 FreeRTOS 调度器给 WiFi 任务时间释放碎片
+            if (retry == 1) {
+                Serial.println("[Weather] 延长等待 30s, 让系统自然回收堆碎片...");
+                vTaskDelay(pdMS_TO_TICKS(30000));  // 30s
+            }
         }
     }
 
@@ -500,9 +532,13 @@ bool WeatherManager::fetchCityInfo() {
     const int maxRetries = 3;
 
     for (int retry = 0; retry < maxRetries; retry++) {
-        // 【优化#3】请求前检查堆内存
-        if (ESP.getFreeHeap() < 25 * 1024) {
-            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃本次请求\n", ESP.getFreeHeap());
+        // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
+        // mbedTLS 握手需要 ~16KB 连续内存，HTTP 响应 buffer 还要 ~4KB，合计 > 20KB
+        // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
+        size_t maxAlloc = ESP.getMaxAllocHeap();
+        if (maxAlloc < 24 * 1024) {
+            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求\n",
+                          maxAlloc, ESP.getFreeHeap());
             return false;
         }
 
@@ -606,9 +642,21 @@ bool WeatherManager::fetchCityInfo() {
         }
         
         if (retry < maxRetries - 1) {
-            // 【优化#2】失败后延时
-            vTaskDelay(pdMS_TO_TICKS(2000));
-            Serial.printf("[Weather] 第%d次失败，2秒后重试...\n", retry + 1);
+            https.end();
+            // 【优化#2】失败后延时，给 FreeRTOS 回收堆碎片时间
+            // 2s 太短，mbedTLS 内部 buffer 还没完全释放；5s 给足够时间回收
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
+                          retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
+            // 【优化#6】第二次失败时延长等待到 30s, 让 mbedTLS 内部状态自然释放
+            // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
+            // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
+            // 改用延长延迟, 让 FreeRTOS 调度器给 WiFi 任务时间释放碎片
+            if (retry == 1) {
+                Serial.println("[Weather] 延长等待 30s, 让系统自然回收堆碎片...");
+                vTaskDelay(pdMS_TO_TICKS(30000));  // 30s
+            }
         }
     }
 
@@ -624,10 +672,10 @@ bool WeatherManager::fetchLocationByIP() {
     }
 
     Serial.println("\n========== 通过IP获取定位 ==========");
-    
+
     String url = "http://ip-api.com/json/?lang=zh-CN";
     Serial.println("[Weather] 请求URL: " + url);
-    
+
     WiFiClient client;
     HTTPClient http;
     
@@ -684,9 +732,13 @@ bool WeatherManager::fetchLocationByIP() {
         String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + lon + "%2C" + lat;
         Serial.println("[Weather] 和风天气地理查询: " + geoUrl);
 
-        // 【优化#3】请求前检查堆内存
-        if (ESP.getFreeHeap() < 25 * 1024) {
-            Serial.printf("[Weather] 堆内存不足 (%u B)，放弃地理查询\n", ESP.getFreeHeap());
+        // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
+        // mbedTLS 握手需要 ~16KB 连续内存，HTTP 响应 buffer 还要 ~4KB，合计 > 20KB
+        // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
+        size_t maxAlloc = ESP.getMaxAllocHeap();
+        if (maxAlloc < 24 * 1024) {
+            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃地理查询\n",
+                          maxAlloc, ESP.getFreeHeap());
             http.end();
             return false;
         }

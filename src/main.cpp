@@ -278,7 +278,7 @@ void setup() {
     // 启动页面管理器
     pTempPage     = new TempPage(displayManager, weatherManager, aht20Bmp280Sensor, wifiManager);
     pCalendarPage = new CalendarPage(displayManager, timeManager);
-    pForecastPage = new ForecastPage(displayManager, weatherManager);
+    pForecastPage = new ForecastPage(displayManager, weatherManager, timeManager, wifiManager);
     pPressurePage = new PressurePage(displayManager, aht20Bmp280Sensor);
     pHistoryPage            = new HistoryPage(displayManager, aht20Bmp280Sensor);
     pAPModePage            = new APModePage(displayManager, wifiManager);

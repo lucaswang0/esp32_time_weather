@@ -88,23 +88,25 @@ time_weather_v2/
 
 | 页面 | 名称 | 功能 |
 |------|------|------|
-| PAGE_TEMP | 温度页面 | 显示时间、日期、温度、湿度、天气图标 |
-| PAGE_FORECAST | 天气预报 | 3天天气预报（日出日落、温度范围） |
+| PAGE_TEMP | 温度页面 | 显示时间、日期、温度、湿度、天气图标、**月相图标**（QWeather `moonPhaseIcon` 字段，48×48 月光黄）|
+| PAGE_FORECAST | 天气预报 | 3天天气预报（**3 卡片 7 行布局**：日期、天气、温度、湿度、**风向 + 风力 2 行**） |
 | PAGE_CALENDAR | 日历 | 月历视图 |
 | PAGE_PRESSURE | 气压页面 | 气压显示、气压预警（骤降触发） |
 | PAGE_HISTORY | 历史页面 | 温湿度、气压曲线图（每10分钟采样） |
 | PAGE_WIFI_INFO | WiFi信息 | 连接状态、SSID、IP、信号强度 |
-| PAGE_AP_MODE | AP配网 | 启动时WiFi连接失败自动进入，或长按10秒进入，提供WiFi配置门户（显示已保存WiFi列表），同时支持 ESP-Touch SmartConfig 蓝牙配网 |
-| PAGE_STREAMING | 屏幕流 | 接收PC端屏幕流实时显示 |
+| PAGE_AP_MODE | AP配网 | 启动时WiFi连接失败自动进入，或长按10秒进入，提供WiFi配置门户（显示已保存WiFi列表），同时支持 ESP-Touch SmartConfig 蓝牙配网；**10 分钟倒计时后自动退出** |
+| PAGE_STREAMING | 屏幕流 | 接收PC端屏幕流实时显示（**全中文错误提示**） |
 | PAGE_FLIP_CLOCK | 翻页时钟 | 翻页动画时钟显示 |
 
 ## 交互方式
 
 | 操作 | 效果 |
 |------|------|
-| **短按触摸** | 切换到下一个页面 |
-| **双击触摸** | 切换到上一个页面 |
+| **短按触摸** | 切换到下一个页面（AP_MODE 页面**短按直接返回 TempPage** 退出配网） |
+| **双击触摸** | 切换到上一个页面（AP_MODE 页面**双击也返回 TempPage** 退出配网） |
 | **长按10秒以上** | 进入AP配网模式 |
+
+> **AP_MODE 退出机制**: 在 AP 配网页面下，短按或双击触摸会直接退出到 TempPage（不是切换到下一个/上一个页面），避免误触发屏幕流/翻页时钟等不相关页面。倒计时结束后也会自动调 `stopAPMode()` 退出。详见 [PageManager.cpp#L39-L75](src/PageManager.cpp) 和 [APModePage.cpp#L19-L26](src/APModePage.cpp)。
 
 ## 核心特性
 
@@ -125,10 +127,12 @@ time_weather_v2/
 |--------|------|--------|--------|----------|
 | TaskWiFi | 0 | 3 | 4KB | 100ms |
 | TaskTimeSync | 0 | 4 | 4KB | 1s |
-| TaskWeather | 0 | 4 | 8KB | 1s |
+| TaskWeather | 0 | 4 | **16KB** | 1s |
 | TaskSensors | 1 | 5 | 2KB | 500ms |
 | TaskHistory | 1 | 5 | 4KB | 1s |
 | TimeDisplay | 0 | 2 | 8KB | 100ms |
+
+> **注意**: `TaskWeather` 任务栈必须保持 16KB（不是默认 8KB），因为 mbedTLS 握手 + JWT 生成 + HTTPClient 累计栈使用峰值约 4KB，8KB 会在 HTTPS 发起时栈溢出导致 `Guru Meditation Error: Core 0 panic'ed (Store access fault)`。详见 [TaskManager.cpp#L57](src/TaskManager.cpp)。
 
 ## 快速开始
 
@@ -216,6 +220,48 @@ python server.py
 - ArduinoUZlib - gzip解压
 
 ## 更新日志
+
+### 2026-07-25
+
+- **新增**: TempPage 月相图标显示
+  - QWeather `moonPhaseIcon` 字段（如 `"803"` = 盈凸月）显示在日出日落文字右边
+  - 48×48 月光黄 (`#FFFACD`) 月相图，月光色硬边 alpha（阈值 128）
+  - 新增 8 个 `data/icon_800-807.png`（moon phase icons from QWeather）
+  - 修复 PNGdec 字节序问题：`PNG_RGB565_BIG_ENDIAN` → `PNG_RGB565_LITTLE_ENDIAN`（BIG_ENDIAN 误用触发 `__builtin_bswap16` 导致非对称颜色显示为字节序反色）
+
+- **优化**: 合并 Python 工具脚本
+  - `bg_png_to_data.py` + `bg_to_transparent_png.py` 合并为 [`tools/bg_convert.py`](tools/bg_convert.py)
+  - 支持真透明 RGBA 全管道（不调用 `convert('RGB')`）
+  - 新增参数：`--width/--height/--screen-size`、`--mode none/soft/hard/contrast`、`--fit cover/contain/stretch`、`--format rgba/palette8`
+  - moon 目录批量处理为 48×48 月光黄
+
+- **优化**: 3日天气 ForecastPage 布局
+  - 从 6 行扩展到 7 行布局：日期、天气、温度、湿度、**风向（独立 1 行）**、**风力等级（独立 1 行）**
+  - 卡片高度 126 → 134px（仍适配 170px 屏幕）
+  - 温度用 `COLOR_GOLD_WARM`（项目自定义暖金色），其他文字 `TFT_WHITE`
+
+- **优化**: AP配网页面退出机制
+  - 修复 AP_MODE 页面短按/双击会跳到不相关页面（StreamingPlayerPage/FlipClockPage）的设计缺陷
+  - `PageManager::next()/prev()` 在 `_current==PAGE_AP_MODE` 时直接 `switchTo(PAGE_TEMP)`
+  - `APModePage::update()` 倒计时 0 时主动 `stopAPMode()` + TaskManager 自动跳回 TempPage
+  - 修复 `WiFiManager::checkAPTimeout()` 只在 WiFi 已连接时才被调用的隐藏 bug
+
+- **优化**: StreamingPlayerPage 全中文
+  - 所有 `tft.drawString` 和 `snprintf` 用户可见字符串改为中文（"正在连接流媒体服务器" 等）
+  - 调试日志（`Serial.println`）保持英文
+
+- **修复**: TaskWeather 栈溢出 (Store access fault)
+  - 症状：`Guru Meditation Error: Core 0 panic'ed (Store access fault)` 间歇性崩溃（HTTPS 发起 0.5s 后）
+  - 根因：mbedTLS 握手 (3-4KB 内部栈) + JWT 生成 (多个 String + 4 次 base64url malloc 4KB) + HTTPClient 累计栈峰值 6-8KB，8KB 任务栈在临界状态溢出
+  - 修复：TaskWeather 任务栈 `8192` → `16384` (16KB)
+  - 加 4 个阶段 HWM 监控：< 4KB 时打印 ⚠️ 告警
+
+- **修复**: mbedTLS SSL 分配失败 (-32512) 间歇性失败
+  - 症状：`[ssl_client.cpp:37] _handle_error(): [start_ssl_client():264]: (-32512) SSL - Memory allocation failed`
+  - 根因：mbedTLS 强制使用内部 RAM（不能用 PSRAM，Espressif 官方文档确认）+ 动态分配内部 buffer + 多次失败后堆碎片化
+  - 修复 5 步：①HTTPS 请求前检查 `getMaxAllocHeap() < 24*1024` 提前放弃；②失败重试间隔 2s → 5s；③重试日志打印 `getFreeHeap + getMaxAllocHeap` 监控碎片程度；④`taskWeather()` 4 个阶段开始前调用 `waitForHeap(24KB, 15s)` lambda 等堆恢复；⑤fetch* 函数 `retry == 1` 时延长等待 30s 让系统自然回收堆碎片
+
+- **文档**: `README.md` 任务栈说明、AP_MODE 退出机制、页面对比表更新
 
 ### 2026-07-24
 

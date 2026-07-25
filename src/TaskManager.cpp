@@ -281,8 +281,33 @@ void TaskManager::taskWeather() {
             }
         };
 
+        // 【优化#5】堆碎片化检测：连续堆最大块 < 24KB 时主动回收 + 等待
+        // mbedTLS 内部需要 ~16KB 连续 + 4KB 响应 buffer = 20KB+，getMaxAllocHeap < 24KB
+        // 时调用 mbedTLS 必然失败 (-32512)。等待最 15s 让 FreeRTOS 回收碎片
+        auto waitForHeap = [](size_t needBytes) -> bool {
+            const int maxWait = 15;  // 15s
+            for (int i = 0; i < maxWait; i++) {
+                size_t maxAlloc = ESP.getMaxAllocHeap();
+                if (maxAlloc >= needBytes) {
+                    return true;
+                }
+                if (i == 0 || i == 5 || i == 10) {
+                    Serial.printf("[TaskWeather] 堆碎片化, 最大连续块: %u B, 需 %u B, 等待中...\n",
+                                  maxAlloc, needBytes);
+                }
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
+            Serial.printf("[TaskWeather] 堆 15s 内未恢复 (最大块 %u B), 放弃本阶段\n",
+                          ESP.getMaxAllocHeap());
+            return false;
+        };
+
         // 阶段一：IP定位（仅获取一次，成功后不再获取）
         if (!_ipLocationDone && _wifiManager.isConnected()) {
+            if (!waitForHeap(24 * 1024)) {
+                vTaskDelayUntil(&xLastWakeTime, xFrequency);
+                continue;
+            }
             Serial.println("[TaskWeather] 阶段一: 通过IP获取定位");
             if (_weatherManager.fetchLocationByIP()) {
                 Serial.println("[TaskWeather] IP定位成功");
@@ -297,6 +322,10 @@ void TaskManager::taskWeather() {
 
         // 阶段二：城市信息（IP定位成功后仅获取一次）
         if (!_cityInfoDone && _wifiManager.isConnected()) {
+            if (!waitForHeap(24 * 1024)) {
+                vTaskDelayUntil(&xLastWakeTime, xFrequency);
+                continue;
+            }
             Serial.println("[TaskWeather] 阶段二: 获取城市信息");
             if (_weatherManager.fetchCityInfo()) {
                 Serial.println("[TaskWeather] 城市信息获取成功");
@@ -315,6 +344,10 @@ void TaskManager::taskWeather() {
 
         if (currentWeatherEmpty || now - _lastCurrentWeatherUpdate >= CURRENT_WEATHER_MIN_INTERVAL_MS) {
             if (_wifiManager.isConnected()) {
+                if (!waitForHeap(24 * 1024)) {
+                    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+                    continue;
+                }
                 Serial.println("[TaskWeather] 阶段三: 获取当前天气");
                 if (_weatherManager.fetchCurrentWeather()) {
                     Serial.println("[TaskWeather] 当前天气获取成功");
@@ -331,6 +364,10 @@ void TaskManager::taskWeather() {
 
         if (forecastEmpty || now - _lastForecastUpdate >= FORECAST_MIN_INTERVAL_MS) {
             if (_wifiManager.isConnected()) {
+                if (!waitForHeap(24 * 1024)) {
+                    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+                    continue;
+                }
                 Serial.println("[TaskWeather] 阶段四: 获取天气预报");
                 if (_weatherManager.fetch3DayForecast()) {
                     Serial.println("[TaskWeather] 天气预报获取成功");
