@@ -270,11 +270,11 @@ python server.py
   - **二次优化#8**：避免"反复重试"循环。重试次数 3→2 + 失败时显式析构 mbedTLS（`~WiFiClientSecure()` + placement new 重建）强制释放 SSL context (32KB)；原"WiFi.disconnect(true)"方案会触发 WiFiManager::maintainConnection() 进入 AP 配网模式循环，已撤掉
   - **关键**：weatherClient 必须在 retry 循环**外**定义，否则 C++ 默认构造会与 placement new 冲突，导致析构时被双重释放
 
-- **升级#1**: ESP32 Arduino Core 2.x → 3.x（`upgrade/esp32-core-3x` 分支）
-  - 根因：mbedTLS 32KB 连续内存块需求在堆碎片化时无法满足，触发 SSL -32512 失败
-  - 修复：升级到 `espressif32@^6.10.0`（Arduino Core 3.x），使用 `WiFiClientSecure::setBufferSizes(16384, 4096)` 预分配静态 buffer，避免运行时 malloc 32KB 连续块
-  - 4 个 fetch 函数（fetchCurrentWeather / fetch3DayForecast / fetchCityInfo / fetchLocationByIP）都加了 `setBufferSizes(16384, 4096)`
-  - libsodium include 路径用 `$PLATFORMFW_DIR$` 宏自动适配新 framework 版本
+- **升级#1（失败）**: ESP32 Arduino Core 2.x → 3.x（`upgrade/esp32-core-3x` 分支）
+  - 目的：使用 `WiFiClientSecure::setBufferSizes(16384, 4096)` 预分配 mbedTLS 静态 buffer
+  - **失败原因**：`espressif32@6.10.0` 平台仍用 Arduino Core 2.x，`setBufferSizes()` 不可用（编译错误 `class WiFiClientSecure' has no member named 'setBufferSizes'`）
+  - 真正 Core 3.x 升级需要 `espressif32@7.x` 或 `8.x`，但风险大（API 变化多）
+  - **决定**：撤回 Core 3.x 升级，保留 main 分支的 5 步 mbedTLS workaround（堆检查 + 重试 + 析构 + placement new + 30s 等待）
 
 - **文档**: `README.md` 任务栈说明、AP_MODE 退出机制、页面对比表更新
 
