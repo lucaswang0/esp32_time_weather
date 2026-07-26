@@ -193,6 +193,11 @@ bool WeatherManager::fetchCurrentWeather() {
         HTTPClient https;
 
         client.setInsecure();
+        // 【升级#2】setBufferSizes(16KB recv + 4KB send) 预分配 mbedTLS 静态 buffer
+        // 解决 mbedTLS 32KB 连续块分配失败 (-32512)
+        // ESP32 Arduino Core 3.x 新增 API, Core 2.x 没有 (会编译错误)
+        // 预分配 20KB 静态 buffer 避免运行时 malloc 32KB 连续块
+        client.setBufferSizes(16384, 4096);
         client.setTimeout(5);
         // 缩短握手超时（默认 30s 太长），失败时更快释放资源
         client.setHandshakeTimeout(5000);
@@ -777,6 +782,8 @@ bool WeatherManager::fetchLocationByIP() {
         HTTPClient https;
 
         geoClient.setInsecure();
+        // 【升级#2】setBufferSizes 预分配 mbedTLS 静态 buffer (同上)
+        geoClient.setBufferSizes(16384, 4096);
         geoClient.setTimeout(5);
         geoClient.setHandshakeTimeout(5000);
         https.begin(geoClient, geoUrl);
