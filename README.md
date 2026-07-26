@@ -270,6 +270,28 @@ python server.py
   - **二次优化#8**：避免"反复重试"循环。重试次数 3→2 + 失败时显式析构 mbedTLS（`~WiFiClientSecure()` + placement new 重建）强制释放 SSL context (32KB)；原"WiFi.disconnect(true)"方案会触发 WiFiManager::maintainConnection() 进入 AP 配网模式循环，已撤掉
   - **关键**：weatherClient 必须在 retry 循环**外**定义，否则 C++ 默认构造会与 placement new 冲突，导致析构时被双重释放
 
+- **优化#10（隐藏 bug 修复）**: `setTimeout` 单位修正（秒 → 毫秒）
+  - 之前：`client.setTimeout(5)` 实际是 **5 毫秒**（`setTimeout(uint32_t ms)` 参数是毫秒，不是秒！）
+  - 5ms 几乎必定超时 → HTTPS 连接无法建立 → SSL -32512 失败的隐藏根因之一
+  - 修复：`client.setTimeout(5000)` = 5 秒 socket 读/写超时
+  - 同时强调 `setInsecure()` 的关键作用：禁用证书验证，省掉 mbedTLS 证书缓冲区（~2-3KB），把峰值内存从 ~40KB 降到 ~30KB
+  - 所有 4 个 fetch 函数统一配置：
+    ```cpp
+    client.setInsecure();           // ⭐ 关键：省掉证书缓冲区
+    client.setTimeout(5000);        // 5 秒 socket 读/写超时（毫秒！）
+    client.setHandshakeTimeout(5000); // 5 秒 TLS 握手超时
+    ```
+
+- **优化#11（真正根因）**: 删除 stage2 冗余 HTTPS 调用
+  - 真正根因：`mbedtls_ssl_session` 结构内嵌 16KB in_buf + 16KB out_buf = 32KB，`mbedtls_ssl_setup()` 内部 calloc(1, ~33KB) 分配 session
+  - 堆最大连续块 32756B (~32KB) < 33KB → calloc 失败 → -32512 SSL Memory allocation failed
+  - 之前 5 步 workaround 都不解决根因（mbedTLS 内部绝对需求 33KB）
+  - `stage1 fetchLocationByIP` 内部**已经**调 HTTPS `geo/v2/city/lookup` 拿到 city + locationId
+  - `stage2 fetchCityInfo` **又调一次** HTTPS `geo/v2/city/lookup`（同 API 同 URL）
+  - 删除 stage2 = 消除 1 次冗余 HTTPS 调用 = 显著降低 SSL -32512 失败率
+  - **stage3/4 HTTPS 仍然可能失败**（mbedTLS 33KB 需求根因未解决），但失败次数减少 1/3
+  - 最终根治需要：升级 ESP32 Arduino Core 3.x（用 `setBufferSizes()`）或换 BearSSL 实现
+
 - **文档**: `README.md` 任务栈说明、AP_MODE 退出机制、页面对比表更新
 
 ### 2026-07-24

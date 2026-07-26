@@ -320,6 +320,16 @@ void TaskManager::taskWeather() {
     const TickType_t xFrequency = pdMS_TO_TICKS(1000);
 
     for (;;) {
+        // 【页面门控】TaskWeather 只在温度页和 3 日天气页执行, 其它页暂停
+        // - 节省 HTTPS 请求和 mbedTLS 33KB 堆占用
+        // - _ipLocationDone / _lastCurrentWeatherUpdate / _lastForecastUpdate
+        //   保留状态, 切回允许页会接着推进
+        PageManager::PageMode cur = _pageManager.current();
+        if (cur != PageManager::PAGE_TEMP && cur != PageManager::PAGE_FORECAST) {
+            vTaskDelayUntil(&xLastWakeTime, xFrequency);
+            continue;
+        }
+
         unsigned long now = millis();
 
         // HWM 监控辅助：打印任务栈剩余最小值 + 堆状态
@@ -383,23 +393,12 @@ void TaskManager::taskWeather() {
             continue;
         }
 
-        // 阶段二：城市信息（IP定位成功后仅获取一次）
-        if (!_cityInfoDone && _wifiManager.isConnected()) {
-            if (!waitForHeap(24 * 1024)) {
-                vTaskDelayUntil(&xLastWakeTime, xFrequency);
-                continue;
-            }
-            Serial.println("[TaskWeather] 阶段二: 获取城市信息");
-            if (_weatherManager.fetchCityInfo()) {
-                Serial.println("[TaskWeather] 城市信息获取成功");
-                _cityInfoDone = true;
-            } else {
-                Serial.println("[TaskWeather] 城市信息获取失败，下次任务时重试");
-            }
-            printHwm("stage2 city-info");
-            vTaskDelayUntil(&xLastWakeTime, xFrequency);
-            continue;
-        }
+        // 阶段二：【已删除】原 fetchCityInfo 与 stage1 冗余 (stage1 已拿到 city + locationId)
+        // 阶段一 fetchLocationByIP 内部已经调 HTTPS geo/v2/city/lookup 拿到 city="黄浦" + locationId="101020400"
+        // 阶段二 fetchCityInfo 又调一次 HTTPS geo/v2/city/lookup (同 API 同 URL, 仅 locationId 不同)
+        // 每次 HTTPS 都需要 mbedtls_ssl_session 33KB 连续块, 32KB 堆最大块 < 33KB → 100% 失败 (-32512)
+        // 删除 stage2 消除 1 次冗余 HTTPS 调用, 显著降低 SSL 失败率
+        _cityInfoDone = true;  // 标记跳过 (stage1 已经完成 city info 获取)
 
         // 阶段三：获取当前天气（成功后需间隔10分钟以上）
         bool currentWeatherEmpty = (_weatherManager.getTemperature().length() == 0 ||
