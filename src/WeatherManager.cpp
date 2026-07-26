@@ -168,7 +168,16 @@ bool WeatherManager::fetchCurrentWeather() {
     Serial.println("\n========== 获取当前天气 ==========");
     Serial.println("[Weather] 请求URL: " + url);
 
-    const int maxRetries = 3;
+    // 【优化#8】重试 3 → 2: 避免 "反复重试" 循环
+    // 原来 3 次重试 + 5s + 30s = 1+ 分钟一次失败循环
+    // 现在 2 次 (1 次重试) + 5s = 失败后 5s 等待再试 1 次
+    // 失败时显式析构 mbedTLS 释放 SSL context (32KB) + placement new 重建
+    // (不能直接 WiFi.disconnect(true): 会触发 AP 配网模式循环)
+    //
+    // 注意: weatherClient 必须在 retry 循环**外**定义, 否则 C++ 默认构造
+    // 会与 placement new 冲突, 导致析构时被双重释放
+    const int maxRetries = 2;
+    WiFiClientSecure weatherClient;  // 循环外定义, 整个函数生命周期
     for (int retry = 0; retry < maxRetries; retry++) {
         // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
         // mbedTLS 握手需要 ~16KB 连续内存，HTTP 响应 buffer 还要 ~4KB，合计 > 20KB
@@ -180,15 +189,15 @@ bool WeatherManager::fetchCurrentWeather() {
             return false;
         }
 
-        WiFiClientSecure weatherClient;
+        WiFiClientSecure& client = weatherClient;  // 引用, 与外层 weatherClient 同对象
         HTTPClient https;
 
-        weatherClient.setInsecure();
-        weatherClient.setTimeout(5);
+        client.setInsecure();
+        client.setTimeout(5);
         // 缩短握手超时（默认 30s 太长），失败时更快释放资源
-        weatherClient.setHandshakeTimeout(5000);
+        client.setHandshakeTimeout(5000);
 
-        https.begin(weatherClient, url);
+        https.begin(client, url);
         https.addHeader("Authorization", "Bearer " + token);
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
@@ -315,14 +324,15 @@ bool WeatherManager::fetchCurrentWeather() {
             Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
                           retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
-            // 【优化#6】第二次失败时延长等待到 30s, 让 mbedTLS 内部状态自然释放
+            // 【优化#8】主动释放 mbedTLS 内部 buffer: 析构 + placement new 重建
+            // mbedTLS 失败后内部 SSL context (32KB) 可能部分残留, 析构强制释放
             // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
             // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
-            // 改用延长延迟, 让 FreeRTOS 调度器给 WiFi 任务时间释放碎片
-            if (retry == 1) {
-                Serial.println("[Weather] 延长等待 30s, 让系统自然回收堆碎片...");
-                vTaskDelay(pdMS_TO_TICKS(30000));  // 30s
-            }
+            Serial.println("[Weather] 主动释放 mbedTLS 内部 buffer...");
+            weatherClient.~WiFiClientSecure();
+            new (&weatherClient) WiFiClientSecure();
+            Serial.printf("[Weather] mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B\n",
+                          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         }
     }
 
@@ -352,7 +362,16 @@ bool WeatherManager::fetch3DayForecast() {
     Serial.println("\n========== 获取3天天气预报 ==========");
     Serial.println("[Weather] 请求URL: " + url);
     
-    const int maxRetries = 3;
+    // 【优化#8】重试 3 → 2: 避免 "反复重试" 循环
+    // 原来 3 次重试 + 5s + 30s = 1+ 分钟一次失败循环
+    // 现在 2 次 (1 次重试) + 5s = 失败后 5s 等待再试 1 次
+    // 失败时显式析构 mbedTLS 释放 SSL context (32KB) + placement new 重建
+    // (不能直接 WiFi.disconnect(true): 会触发 AP 配网模式循环)
+    //
+    // 注意: weatherClient 必须在 retry 循环**外**定义, 否则 C++ 默认构造
+    // 会与 placement new 冲突, 导致析构时被双重释放
+    const int maxRetries = 2;
+    WiFiClientSecure weatherClient;  // 循环外定义, 整个函数生命周期
     for (int retry = 0; retry < maxRetries; retry++) {
         // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
         // mbedTLS 握手需要 ~16KB 连续内存，HTTP 响应 buffer 还要 ~4KB，合计 > 20KB
@@ -364,14 +383,14 @@ bool WeatherManager::fetch3DayForecast() {
             return false;
         }
 
-        WiFiClientSecure weatherClient;
+        WiFiClientSecure& client = weatherClient;  // 引用, 与外层 weatherClient 同对象
         HTTPClient https;
 
-        weatherClient.setInsecure();
-        weatherClient.setTimeout(5);
-        weatherClient.setHandshakeTimeout(5000);
+        client.setInsecure();
+        client.setTimeout(5);
+        client.setHandshakeTimeout(5000);
 
-        https.begin(weatherClient, url);
+        https.begin(client, url);
         https.addHeader("Authorization", "Bearer " + token);
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
@@ -493,14 +512,15 @@ bool WeatherManager::fetch3DayForecast() {
             Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
                           retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
-            // 【优化#6】第二次失败时延长等待到 30s, 让 mbedTLS 内部状态自然释放
+            // 【优化#8】主动释放 mbedTLS 内部 buffer: 析构 + placement new 重建
+            // mbedTLS 失败后内部 SSL context (32KB) 可能部分残留, 析构强制释放
             // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
             // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
-            // 改用延长延迟, 让 FreeRTOS 调度器给 WiFi 任务时间释放碎片
-            if (retry == 1) {
-                Serial.println("[Weather] 延长等待 30s, 让系统自然回收堆碎片...");
-                vTaskDelay(pdMS_TO_TICKS(30000));  // 30s
-            }
+            Serial.println("[Weather] 主动释放 mbedTLS 内部 buffer...");
+            weatherClient.~WiFiClientSecure();
+            new (&weatherClient) WiFiClientSecure();
+            Serial.printf("[Weather] mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B\n",
+                          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         }
     }
 
@@ -529,7 +549,16 @@ bool WeatherManager::fetchCityInfo() {
     Serial.println("\n========== 获取城市信息 ==========");
     Serial.println("[Weather] 请求URL: " + url);
     
-    const int maxRetries = 3;
+    // 【优化#8】重试 3 → 2: 避免 "反复重试" 循环
+    // 原来 3 次重试 + 5s + 30s = 1+ 分钟一次失败循环
+    // 现在 2 次 (1 次重试) + 5s = 失败后 5s 等待再试 1 次
+    // 失败时显式析构 mbedTLS 释放 SSL context (32KB) + placement new 重建
+    // (不能直接 WiFi.disconnect(true): 会触发 AP 配网模式循环)
+    //
+    // 注意: weatherClient 必须在 retry 循环**外**定义, 否则 C++ 默认构造
+    // 会与 placement new 冲突, 导致析构时被双重释放
+    const int maxRetries = 2;
+    WiFiClientSecure weatherClient;  // 循环外定义, 整个函数生命周期
 
     for (int retry = 0; retry < maxRetries; retry++) {
         // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
@@ -542,14 +571,14 @@ bool WeatherManager::fetchCityInfo() {
             return false;
         }
 
-        WiFiClientSecure weatherClient;
+        WiFiClientSecure& client = weatherClient;  // 引用, 与外层 weatherClient 同对象
         HTTPClient https;
 
-        weatherClient.setInsecure();
-        weatherClient.setTimeout(5);
-        weatherClient.setHandshakeTimeout(5000);
+        client.setInsecure();
+        client.setTimeout(5);
+        client.setHandshakeTimeout(5000);
 
-        https.begin(weatherClient, url);
+        https.begin(client, url);
         https.addHeader("Authorization", "Bearer " + token);
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
@@ -649,14 +678,15 @@ bool WeatherManager::fetchCityInfo() {
             Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
                           retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
-            // 【优化#6】第二次失败时延长等待到 30s, 让 mbedTLS 内部状态自然释放
+            // 【优化#8】主动释放 mbedTLS 内部 buffer: 析构 + placement new 重建
+            // mbedTLS 失败后内部 SSL context (32KB) 可能部分残留, 析构强制释放
             // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
             // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
-            // 改用延长延迟, 让 FreeRTOS 调度器给 WiFi 任务时间释放碎片
-            if (retry == 1) {
-                Serial.println("[Weather] 延长等待 30s, 让系统自然回收堆碎片...");
-                vTaskDelay(pdMS_TO_TICKS(30000));  // 30s
-            }
+            Serial.println("[Weather] 主动释放 mbedTLS 内部 buffer...");
+            weatherClient.~WiFiClientSecure();
+            new (&weatherClient) WiFiClientSecure();
+            Serial.printf("[Weather] mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B\n",
+                          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         }
     }
 

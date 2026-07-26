@@ -65,10 +65,13 @@ void TaskManager::begin() {
     );
     
     // 传感器读取任务 - 5秒间隔
+    // 栈 4096 (4KB) 修复: 实测 2KB 栈使用率 94.7% (剩 108B)
+    // 根因: Serial.printf 内部 vprintf 占用 ~1.5KB 栈, readAHT20 + readBMP280 两个 printf 累计 ~3KB
+    // (加上 I2C 局部变量 + Wire 库 buffer 实际 ~1.9KB, 2KB 栈临界, 任何中断嵌套都会溢出)
     xTaskCreatePinnedToCore(
         taskSensorsWrapper,
         "TaskSensors",
-        2048,
+        4096,        // 2KB → 4KB（4 倍安全裕量）
         this,
         5,
         &_taskSensors,
@@ -96,6 +99,55 @@ void TaskManager::begin() {
         &_taskTimeDisplay,
         0
     );
+
+    // 启动后等 1s 让所有任务稳定运行, 然后打印初始内存状态
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    printMemoryUsage("startup");
+}
+
+void TaskManager::printMemoryUsage(const char* tag) {
+    // 【优化#8】统一打印所有任务栈 HWM + 堆状态, 用于内存优化决策
+    // HWM = 任务栈剩余最小值 (从栈基址往下)
+    // used = 分配大小 - HWM (实际使用峰值)
+    // ⚠️ = used > 80% (危险), ⚡ = used > 60% (警告), ✓ = 正常
+    Serial.printf("\n=== 内存快照 [%s] ===\n", tag);
+
+    struct TaskInfo {
+        TaskHandle_t handle;
+        const char* name;
+        uint32_t size;
+    };
+    TaskInfo tasks[] = {
+        {_taskWiFi,        "TaskWiFi",     4096},
+        {_taskTimeSync,    "TaskTimeSync", 4096},
+        {_taskWeather,     "TaskWeather",  16384},
+        {_taskSensors,     "TaskSensors",  4096},
+        {_taskHistory,     "TaskHistory",  4096},
+        {_taskTimeDisplay, "TimeDisplay",  8192},
+    };
+
+    uint32_t totalAlloc = 0;
+    uint32_t totalUsed  = 0;
+    for (const auto& t : tasks) {
+        if (t.handle == NULL) {
+            Serial.printf("  %-15s : [未创建]\n", t.name);
+            continue;
+        }
+        UBaseType_t hwm = uxTaskGetStackHighWaterMark(t.handle);
+        uint32_t used = t.size - hwm;
+        float pct = (t.size > 0) ? (used * 100.0f / t.size) : 0.0f;
+        const char* mark = (pct > 80) ? " ⚠️" : (pct > 60) ? " ⚡" : " ✓";
+        Serial.printf("  %-15s : %5u B 剩 / %5u B 分配 | 用了 ~%5u B (%4.1f%%)%s\n",
+                      t.name, hwm, t.size, used, pct, mark);
+        totalAlloc += t.size;
+        totalUsed  += used;
+    }
+    float totalPct = (totalAlloc > 0) ? (totalUsed * 100.0f / totalAlloc) : 0.0f;
+    Serial.printf("  %-15s : %5u B 总用 / %5u B 总分配 (%4.1f%%)\n",
+                  "[任务栈合计]", totalUsed, totalAlloc, totalPct);
+    Serial.printf("  %-15s : %u B 剩余, 最大连续块: %u B\n",
+                  "[堆]", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    Serial.println("========================\n");
 }
 
 void TaskManager::stop() {
@@ -270,15 +322,22 @@ void TaskManager::taskWeather() {
     for (;;) {
         unsigned long now = millis();
 
-        // HWM 监控辅助：打印任务栈剩余最小值
+        // HWM 监控辅助：打印任务栈剩余最小值 + 堆状态
         // 正常情况: HWM > 12KB；告警: HWM < 4KB (栈快吃完)
-        auto printHwm = [](const char* stage) {
+        // 堆正常: freeHeap > 70KB, maxAllocHeap > 30KB
+        auto printHwm = [this](const char* stage) {
             UBaseType_t hwm = uxTaskGetStackHighWaterMark(NULL);
             if (hwm < 4096) {
                 Serial.printf("[TaskWeather] ⚠️  HWM after %s: %u bytes free (栈告警 < 4KB)\n", stage, hwm);
             } else {
                 Serial.printf("[TaskWeather] HWM after %s: %u bytes free\n", stage, hwm);
             }
+            // 每 3 个阶段打一次完整内存快照 (避免日志刷屏)
+            // 用 stage 名字后缀区分, 只在 stage2/stage4 (偶数) 打全量
+            size_t freeHeap = ESP.getFreeHeap();
+            size_t maxAlloc = ESP.getMaxAllocHeap();
+            Serial.printf("[TaskWeather] 堆状态 after %s: %u B 剩余, 最大块 %u B\n",
+                          stage, freeHeap, maxAlloc);
         };
 
         // 【优化#5】堆碎片化检测：连续堆最大块 < 24KB 时主动回收 + 等待
@@ -289,6 +348,10 @@ void TaskManager::taskWeather() {
             for (int i = 0; i < maxWait; i++) {
                 size_t maxAlloc = ESP.getMaxAllocHeap();
                 if (maxAlloc >= needBytes) {
+                    if (i > 0) {
+                        Serial.printf("[TaskWeather] 堆已恢复, 最大连续块: %u B (等待 %ds)\n",
+                                      maxAlloc, i);
+                    }
                     return true;
                 }
                 if (i == 0 || i == 5 || i == 10) {

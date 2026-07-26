@@ -30,6 +30,7 @@ public:
     
     void begin();
     void stop();
+    void printMemoryUsage(const char* tag = "snapshot");  // 打印所有任务栈 HWM + 堆状态
     
     bool isTimeSynced() const;
     void setTimeSynced(bool synced);

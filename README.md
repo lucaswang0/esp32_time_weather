@@ -128,11 +128,13 @@ time_weather_v2/
 | TaskWiFi | 0 | 3 | 4KB | 100ms |
 | TaskTimeSync | 0 | 4 | 4KB | 1s |
 | TaskWeather | 0 | 4 | **16KB** | 1s |
-| TaskSensors | 1 | 5 | 2KB | 500ms |
+| **TaskSensors** | 1 | 5 | **4KB** | 500ms |
 | TaskHistory | 1 | 5 | 4KB | 1s |
 | TimeDisplay | 0 | 2 | 8KB | 100ms |
 
-> **注意**: `TaskWeather` 任务栈必须保持 16KB（不是默认 8KB），因为 mbedTLS 握手 + JWT 生成 + HTTPClient 累计栈使用峰值约 4KB，8KB 会在 HTTPS 发起时栈溢出导致 `Guru Meditation Error: Core 0 panic'ed (Store access fault)`。详见 [TaskManager.cpp#L57](src/TaskManager.cpp)。
+> **注意**:
+> - `TaskWeather` 任务栈必须保持 16KB（不是默认 8KB），因为 mbedTLS 握手 + JWT 生成 + HTTPClient 累计栈使用峰值约 4KB，8KB 会在 HTTPS 发起时栈溢出导致 `Guru Meditation Error: Core 0 panic'ed (Store access fault)`。详见 [TaskManager.cpp#L57](src/TaskManager.cpp)。
+> - `TaskSensors` 任务栈必须保持 4KB（不是 2KB），因为 `readAHT20()` 和 `readBMP280()` 各有一个 `Serial.printf`，`printf` 内部 `vprintf` 占用 ~1.5KB 栈，两个 printf 累计 ~3KB，2KB 栈使用率达 94.7% 极危险。详见 [TaskManager.cpp#L74](src/TaskManager.cpp)。
 
 ## 快速开始
 
@@ -256,10 +258,17 @@ python server.py
   - 修复：TaskWeather 任务栈 `8192` → `16384` (16KB)
   - 加 4 个阶段 HWM 监控：< 4KB 时打印 ⚠️ 告警
 
+- **修复**: TaskSensors 栈使用率 94.7% 临界
+  - 症状：启动后 `printMemoryUsage` 报告 `TaskSensors : 108 B 剩 / 2048 B 分配 | 用了 ~1940 B (94.7%) ⚠️`
+  - 根因：`readAHT20()` + `readBMP280()` 各有一个 `Serial.printf`，Arduino `printf` 内部 `vprintf` 占用 ~1.5KB 栈，两个 printf 累计 ~3KB 加上 I2C 局部变量 + Wire 库 buffer 实际 ~1.9KB，2KB 栈几乎耗尽
+  - 修复：TaskSensors 任务栈 `2048` → `4096` (4KB)
+
 - **修复**: mbedTLS SSL 分配失败 (-32512) 间歇性失败
   - 症状：`[ssl_client.cpp:37] _handle_error(): [start_ssl_client():264]: (-32512) SSL - Memory allocation failed`
   - 根因：mbedTLS 强制使用内部 RAM（不能用 PSRAM，Espressif 官方文档确认）+ 动态分配内部 buffer + 多次失败后堆碎片化
   - 修复 5 步：①HTTPS 请求前检查 `getMaxAllocHeap() < 24*1024` 提前放弃；②失败重试间隔 2s → 5s；③重试日志打印 `getFreeHeap + getMaxAllocHeap` 监控碎片程度；④`taskWeather()` 4 个阶段开始前调用 `waitForHeap(24KB, 15s)` lambda 等堆恢复；⑤fetch* 函数 `retry == 1` 时延长等待 30s 让系统自然回收堆碎片
+  - **二次优化#8**：避免"反复重试"循环。重试次数 3→2 + 失败时显式析构 mbedTLS（`~WiFiClientSecure()` + placement new 重建）强制释放 SSL context (32KB)；原"WiFi.disconnect(true)"方案会触发 WiFiManager::maintainConnection() 进入 AP 配网模式循环，已撤掉
+  - **关键**：weatherClient 必须在 retry 循环**外**定义，否则 C++ 默认构造会与 placement new 冲突，导致析构时被双重释放
 
 - **文档**: `README.md` 任务栈说明、AP_MODE 退出机制、页面对比表更新
 
