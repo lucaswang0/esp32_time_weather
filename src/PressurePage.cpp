@@ -39,10 +39,17 @@ void PressurePage::update() {
         checkAlert();
     }
 
-    // 每 30 秒重绘一次页面（标题时间、当前气压读数随传感器刷新）
-    // sensor 每 5 秒更新一次气压，30s 红绘兼顾实时性与闪动频率
+    // 每 30 秒重绘一次页面（仅更新数值区域，保留背景图）
     if (now - lastDrawTime >= 30000) {
         lastDrawTime = now;
+        drawPage();
+    }
+
+    // 每 60 秒全量刷新（重绘背景 + 全部内容），彻底消除残影
+    static unsigned long lastFullRefresh = 0;
+    if (now - lastFullRefresh >= 60000) {
+        lastFullRefresh = now;
+        _display.clearScreen();
         drawPage();
     }
 }
@@ -253,8 +260,6 @@ void PressurePage::drawPage() {
     } else {
         strcpy(buf, "--");
     }
-    // 局部 fillRect 清除残影（仅 130x30 像素，不覆盖整个屏幕）
-    // tft.fillRect(value_x, value_y, 130, 30, 0x95B6);
     _display.drawTextWithTransparentBgFont(buf, value_x, value_y, COLOR_WHITE, font_medium_32);
 
     // 单位标识：放在数值右侧，紧凑（透明背景）
@@ -280,8 +285,6 @@ void PressurePage::drawPage() {
 
     // 数值列（size 2，使用默认字体；保持 tft.setTextSize(2)+tft.print 方式）
     int val_col_x = 110;
-    // 局部 fillRect 清除残影（仅 200x18 像素）
-    // tft.fillRect(val_col_x, row1_y - 2, 200, 18, 0x95B6);
     tft.setTextSize(2);
     if (lastRecordCount >= ALERT_RECORDS_NEEDED) {
         sprintf(buf, "%.1f", lastChange3h);

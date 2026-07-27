@@ -19,9 +19,10 @@ typedef struct {
 class HistoryPage : public PageBase {
 public:
     HistoryPage(DisplayManager& disp, AHT20BMP280Sensor& aht20);
+    ~HistoryPage() override;
     
     void onEnter() override;
-    void onExit() override {}
+    void onExit() override;
     void update() override;
     void addRecord(float temp, float humidity, float pressure);
     
@@ -29,7 +30,7 @@ private:
     DisplayManager& _display;
     AHT20BMP280Sensor& _aht20;
     
-    WeatherRecord history[MAX_HISTORY_BUFFER];
+    WeatherRecord* history = nullptr;
     int historyCount;
 
     void drawStatusBar();

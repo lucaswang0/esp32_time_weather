@@ -18,8 +18,7 @@ static char decompressed[4096];
 static void restoreBgCacheIfNeeded() {
     // 背景图改为 PROGMEM 数组后无需恢复
 }
-static JsonDocument doc1024;
-static JsonDocument doc2048;
+static JsonDocument doc;
 
 WeatherManager::WeatherManager(WiFiManager& wifiManager) : wifiManager(wifiManager) {
     if (!sodiumInitialized) {
@@ -33,21 +32,21 @@ WeatherManager::WeatherManager(WiFiManager& wifiManager) : wifiManager(wifiManag
 }
 
 String WeatherManager::base64url_encode(const uint8_t* data, size_t len) {
+    static unsigned char base64_buf[256];
     size_t output_len;
-    unsigned char* base64_buf = (unsigned char*)malloc(len * 2 + 10);
-    if (base64_buf == NULL) {
+    size_t needed = len * 2 + 10;
+    if (needed > sizeof(base64_buf)) {
+        Serial.printf("[Weather] base64url_encode: buffer too small (%u > %u), len=%u\n",
+                      needed, sizeof(base64_buf), (unsigned)len);
         return "";
     }
     
-    int ret = mbedtls_base64_encode(base64_buf, len * 2, &output_len, data, len);
+    int ret = mbedtls_base64_encode(base64_buf, sizeof(base64_buf), &output_len, data, len);
     if (ret != 0) {
-        free(base64_buf);
         return "";
     }
     
     String result = (char*)base64_buf;
-    free(base64_buf);
-    
     result.replace('+', '-');
     result.replace('/', '_');
     while (result.endsWith("=")) {
@@ -227,8 +226,8 @@ bool WeatherManager::fetchCurrentWeather() {
                         Serial.println(decompressed);
                         Serial.println();
                         
-                        doc1024.clear();
-                        DeserializationError error = deserializeJson(doc1024, decompressed);
+                        doc.clear();
+                        DeserializationError error = deserializeJson(doc, decompressed);
                         
                         if (error) {
                             Serial.print("[Weather] JSON解析失败: ");
@@ -237,7 +236,7 @@ bool WeatherManager::fetchCurrentWeather() {
                             return false;
                         }
                         
-                        const char* code = doc1024["code"];
+                        const char* code = doc["code"];
                         if (code == NULL || strcmp(code, "200") != 0) {
                             Serial.printf("[Weather] API返回错误码: %s\n", code ? code : "NULL");
                             Serial.println("[Weather] JSON响应内容:");
@@ -246,7 +245,7 @@ bool WeatherManager::fetchCurrentWeather() {
                             return false;
                         }
                         
-                        JsonObject now = doc1024["now"];
+                        JsonObject now = doc["now"];
                         temperature = now["temp"].as<String>() + "°C";
                         weatherText = now["text"].as<String>();
                         weatherCode = now["icon"].as<String>();
@@ -278,16 +277,16 @@ bool WeatherManager::fetchCurrentWeather() {
                     Serial.println((const char*)compressedData);
                     Serial.println();
                     
-                    doc1024.clear();
-                    DeserializationError error = deserializeJson(doc1024, (const char*)compressedData);
+                    doc.clear();
+                    DeserializationError error = deserializeJson(doc, (const char*)compressedData);
                     
                     if (error) {
                         Serial.print("[Weather] JSON解析失败: ");
                         Serial.println(error.c_str());
                     } else {
-                        const char* code = doc1024["code"];
+                        const char* code = doc["code"];
                         if (code != NULL && strcmp(code, "200") == 0) {
-                            JsonObject now = doc1024["now"];
+                            JsonObject now = doc["now"];
                             temperature = now["temp"].as<String>() + "°C";
                             weatherText = now["text"].as<String>();
                             weatherCode = now["icon"].as<String>();
@@ -415,8 +414,8 @@ bool WeatherManager::fetch3DayForecast() {
                         Serial.println(decompressed);
                         Serial.println();
 
-                        doc2048.clear();
-                        DeserializationError error = deserializeJson(doc2048, decompressed);
+                        doc.clear();
+                        DeserializationError error = deserializeJson(doc, decompressed);
                         
                         if (error) {
                             Serial.print("[Weather] JSON解析失败: ");
@@ -425,14 +424,14 @@ bool WeatherManager::fetch3DayForecast() {
                             return false;
                         }
                         
-                        const char* code = doc2048["code"];
+                        const char* code = doc["code"];
                         if (code == NULL || strcmp(code, "200") != 0) {
                             Serial.printf("[Weather] API返回错误码: %s\n", code ? code : "NULL");
                             https.end();
                             return false;
                         }
                         
-                        JsonArray dailyArray = doc2048["daily"];
+                        JsonArray dailyArray = doc["daily"];
                         
                         for (int i = 0; i < dailyArray.size() && i < 3; i++) {
                             JsonObject day = dailyArray[i];
@@ -469,16 +468,16 @@ bool WeatherManager::fetch3DayForecast() {
                     Serial.println((const char*)compressedData);
                     Serial.println();
                     
-                    doc2048.clear();
-                    DeserializationError error = deserializeJson(doc2048, (const char*)compressedData);
+                    doc.clear();
+                    DeserializationError error = deserializeJson(doc, (const char*)compressedData);
                     
                     if (error) {
                         Serial.print("[Weather] JSON解析失败: ");
                         Serial.println(error.c_str());
                     } else {
-                        const char* code = doc2048["code"];
+                        const char* code = doc["code"];
                         if (code != NULL && strcmp(code, "200") == 0) {
-                            JsonArray dailyArray = doc2048["daily"];
+                            JsonArray dailyArray = doc["daily"];
                             for (int i = 0; i < dailyArray.size() && i < 3; i++) {
                                 JsonObject day = dailyArray[i];
                                 forecasts[i].date = day["fxDate"].as<String>();
@@ -603,8 +602,8 @@ bool WeatherManager::fetchCityInfo() {
                     if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
                         Serial.println("[Weather] 解压后数据大小: " + String(decompressedLen) + " 字节");
 
-                        doc1024.clear();
-                        DeserializationError error = deserializeJson(doc1024, decompressed);
+                        doc.clear();
+                        DeserializationError error = deserializeJson(doc, decompressed);
                         
                         if (error) {
                             Serial.print("[Weather] JSON解析失败: ");
@@ -613,14 +612,14 @@ bool WeatherManager::fetchCityInfo() {
                             return false;
                         }
                         
-                        const char* code = doc1024["code"];
+                        const char* code = doc["code"];
                         if (code == NULL || strcmp(code, "200") != 0) {
                             Serial.printf("[Weather] API返回错误码: %s\n", code ? code : "NULL");
                             https.end();
                             return false;
                         }
                         
-                        JsonArray locationArray = doc1024["location"];
+                        JsonArray locationArray = doc["location"];
                         if (locationArray.size() > 0) {
                             JsonObject location = locationArray[0];
                             
@@ -643,16 +642,16 @@ bool WeatherManager::fetchCityInfo() {
                     }
                 } else {
                     Serial.println("[Weather] 非gzip格式，直接解析");
-                    doc1024.clear();
-                    DeserializationError error = deserializeJson(doc1024, (const char*)compressedData);
+                    doc.clear();
+                    DeserializationError error = deserializeJson(doc, (const char*)compressedData);
                     
                     if (error) {
                         Serial.print("[Weather] JSON解析失败: ");
                         Serial.println(error.c_str());
                     } else {
-                        const char* code = doc1024["code"];
+                        const char* code = doc["code"];
                         if (code != NULL && strcmp(code, "200") == 0) {
-                            JsonArray locationArray = doc1024["location"];
+                            JsonArray locationArray = doc["location"];
                             if (locationArray.size() > 0) {
                                 JsonObject location = locationArray[0];
                                 city = location["name"].as<String>();
@@ -703,184 +702,210 @@ bool WeatherManager::fetchLocationByIP() {
 
     Serial.println("\n========== 通过IP获取定位 ==========");
 
-    String url = "http://ip-api.com/json/?lang=zh-CN";
-    Serial.println("[Weather] 请求URL: " + url);
+    // 两个 IP 定位服务，主服务失败时自动切换
+    // ip-api.com: 返回中文城市名 (上海市, lat/lon)
+    // ipapi.co:   返回英文城市名 (Shanghai, latitude/longitude) 作为备用
+    struct IpService {
+        const char* url;
+        const char* name;
+        bool isPrimary;
+    };
+    IpService services[] = {
+        { "http://ip-api.com/json/?lang=zh-CN", "ip-api.com", true },
+        { "https://ipapi.co/json", "ipapi.co", false },
+    };
 
-    WiFiClient client;
-    HTTPClient http;
-    
-    http.begin(client, url);
-    http.setTimeout(10000);
-    
-    int httpCode = http.GET();
-    
-    if (httpCode == HTTP_CODE_OK) {
+    String cityName, province, lat, lon;
+    bool ipOk = false;
+
+    for (auto& svc : services) {
+        Serial.printf("[Weather] 请求 %s: %s\n", svc.name, svc.url);
+
+        WiFiClient client;
+        HTTPClient http;
+        http.begin(client, svc.url);
+        http.setTimeout(10000);
+
+        int httpCode = http.GET();
+
+        if (httpCode != HTTP_CODE_OK) {
+            Serial.printf("[Weather] %s 请求失败: %d\n", svc.name, httpCode);
+            http.end();
+            continue;
+        }
+
         String payload = http.getString();
-        Serial.println("[Weather] IP定位响应:");
-        Serial.println(payload);
-        
-        doc1024.clear();
-        DeserializationError error = deserializeJson(doc1024, payload);
-        
+        Serial.printf("[Weather] %s 响应: %s\n", svc.name, payload.c_str());
+
+        doc.clear();
+        DeserializationError error = deserializeJson(doc, payload);
+        http.end();
+
         if (error) {
-            Serial.print("[Weather] IP定位JSON解析失败: ");
-            Serial.println(error.c_str());
-            http.end();
-            return false;
-        }
-        
-        const char* status = doc1024["status"];
-        if (status == NULL || strcmp(status, "success") != 0) {
-            Serial.printf("[Weather] IP定位失败: %s\n", status ? status : "NULL");
-            http.end();
-            return false;
-        }
-        
-        String cityName = doc1024["city"].as<String>();
-        String province = doc1024["regionName"].as<String>();
-        String lat = doc1024["lat"].as<String>();
-        String lon = doc1024["lon"].as<String>();
-        
-        Serial.printf("[Weather] IP定位成功: %s %s (%.4f, %.4f)\n", 
-                      province.c_str(), cityName.c_str(), 
-                      lat.toFloat(), lon.toFloat());
-        
-        if (lat.length() == 0 || lon.length() == 0) {
-            Serial.println("[Weather] 未获取到经纬度");
-            http.end();
-            return false;
+            Serial.printf("[Weather] %s JSON解析失败: %s\n", svc.name, error.c_str());
+            continue;
         }
 
-        String token = generateJWT();
-        if (token == "") {
-            Serial.println("[Weather] JWT生成失败");
-            http.end();
-            return false;
+        if (svc.isPrimary) {
+            // ip-api.com 格式: {"status":"success", "city":"上海", "regionName":"上海市", "lat":31.24, "lon":121.44}
+            const char* status = doc["status"];
+            if (status == NULL || strcmp(status, "success") != 0) {
+                Serial.printf("[Weather] ip-api.com 状态异常: %s\n", status ? status : "NULL");
+                continue;
+            }
+            cityName = doc["city"].as<String>();
+            province = doc["regionName"].as<String>();
+            lat = doc["lat"].as<String>();
+            lon = doc["lon"].as<String>();
+        } else {
+            // ipapi.co 格式: {"city":"Shanghai", "latitude":31.22, "longitude":121.45}
+            // 无 status 字段，直接检查关键字段
+            lat = doc["latitude"].as<String>();
+            lon = doc["longitude"].as<String>();
+            cityName = doc["city"].as<String>();
+            province = doc["region"].as<String>();
         }
 
-        // QWeather 地理查询：location 接受 "lon,lat"（逗号需 URL 编码为 %2C）
-        String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + lon + "%2C" + lat;
-        Serial.println("[Weather] 和风天气地理查询: " + geoUrl);
-
-        // 【优化#3】请求前检查堆**最大连续块** (避免 mbedTLS 内部 malloc 失败)
-        // mbedTLS 握手需要 ~16KB 连续内存，HTTP 响应 buffer 还要 ~4KB，合计 > 20KB
-        // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
-        size_t maxAlloc = ESP.getMaxAllocHeap();
-        if (maxAlloc < 24 * 1024) {
-            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃地理查询\n",
-                          maxAlloc, ESP.getFreeHeap());
-            http.end();
-            return false;
+        if (lat.length() > 0 && lon.length() > 0) {
+            Serial.printf("[Weather] IP定位成功 (%s): %s %s (%.4f, %.4f)\n",
+                          svc.name, province.c_str(), cityName.c_str(),
+                          lat.toFloat(), lon.toFloat());
+            ipOk = true;
+            break;
+        } else {
+            Serial.printf("[Weather] %s 未获取到经纬度, 尝试下一个服务\n", svc.name);
         }
+    }
 
-        WiFiClientSecure geoClient;
-        HTTPClient https;
+    if (!ipOk) {
+        Serial.println("[Weather] 所有IP定位服务均失败，使用默认LOCATION");
+        locationId = LOCATION;
+        return false;
+    }
 
-        geoClient.setInsecure();
-        geoClient.setTimeout(5);
-        geoClient.setHandshakeTimeout(5000);
-        https.begin(geoClient, geoUrl);
-        https.addHeader("Authorization", "Bearer " + token);
-        https.addHeader("Accept-Encoding", "gzip, deflate");
-        https.addHeader("User-Agent", "ESP32-Weather");
+    // JWT + QWeather 地理查询 (或降级到 IP 坐标)
+    String token = generateJWT();
+    if (token == "") {
+        Serial.println("[Weather] JWT生成失败，使用IP定位数据作为降级方案");
+        city = cityName;
+        locationId = lon + "," + lat;
+        return true;
+    }
 
-        int geoCode = https.GET();
+    // QWeather 地理查询：location 接受 "lon,lat"
+    String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + lon + "%2C" + lat;
+    Serial.println("[Weather] 和风天气地理查询: " + geoUrl);
 
-        if (geoCode == HTTP_CODE_OK) {
-            int len = https.getSize();
+    size_t maxAlloc = ESP.getMaxAllocHeap();
+    if (maxAlloc < 24 * 1024) {
+        Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B), 放弃地理查询\n", maxAlloc);
+        city = cityName;
+        locationId = lon + "," + lat;
+        return true;
+    }
 
-            if (len > 0 && len < 4096) {
-                int bytesRead = https.getStream().readBytes(compressedData, len);
+    WiFiClientSecure geoClient;
+    HTTPClient https;
 
-                memset(decompressed, 0, sizeof(decompressed));
-                size_t decompressedLen = sizeof(decompressed) - 1;
+    geoClient.setInsecure();
+    geoClient.setTimeout(5);
+    geoClient.setHandshakeTimeout(5000);
+    https.begin(geoClient, geoUrl);
+    https.addHeader("Authorization", "Bearer " + token);
+    https.addHeader("Accept-Encoding", "gzip, deflate");
+    https.addHeader("User-Agent", "ESP32-Weather");
 
-                bool isGzip = (bytesRead >= 2 && compressedData[0] == 0x1F && compressedData[1] == 0x8B);
+    int geoCode = https.GET();
 
-                if (isGzip) {
-                    if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
-                        Serial.println("[Weather] 地理查询解压后数据大小: " + String(decompressedLen) + " 字节");
+    if (geoCode == HTTP_CODE_OK) {
+        int len = https.getSize();
 
-                        doc1024.clear();
-                        DeserializationError geoError = deserializeJson(doc1024, decompressed);
+        if (len > 0 && len < 4096) {
+            int bytesRead = https.getStream().readBytes(compressedData, len);
 
-                        if (geoError) {
-                            Serial.print("[Weather] 地理查询JSON解析失败: ");
-                            Serial.println(geoError.c_str());
-                            https.end();
-                            http.end();
-                            return false;
-                        }
+            memset(decompressed, 0, sizeof(decompressed));
+            size_t decompressedLen = sizeof(decompressed) - 1;
 
-                        const char* geoCodeStr = doc1024["code"];
-                        if (geoCodeStr != NULL && strcmp(geoCodeStr, "200") == 0) {
-                            JsonArray locationArray = doc1024["location"];
-                            if (locationArray.size() > 0) {
-                                JsonObject location = locationArray[0];
-                                locationId = location["id"].as<String>();
-                                city = location["name"].as<String>();
+            bool isGzip = (bytesRead >= 2 && compressedData[0] == 0x1F && compressedData[1] == 0x8B);
 
-                                Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n",
-                                              locationId.c_str(), city.c_str());
+            if (isGzip) {
+                if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
+                    Serial.printf("[Weather] 地理查询解压后: %u 字节\n", (unsigned)decompressedLen);
 
-                                https.end();
-                                http.end();
-                                return true;
-                            }
-                        }
-                        Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
-                        https.end();
-                    } else {
-                        Serial.println("[Weather] 地理查询gzip解压失败");
-                        https.end();
-                    }
-                } else {
-                    Serial.println("[Weather] 地理查询非gzip格式，直接解析");
-
-                    doc1024.clear();
-                    DeserializationError geoError = deserializeJson(doc1024, (const char*)compressedData);
+                    doc.clear();
+                    DeserializationError geoError = deserializeJson(doc, decompressed);
 
                     if (geoError) {
-                        Serial.print("[Weather] 地理查询JSON解析失败: ");
-                        Serial.println(geoError.c_str());
-                    } else {
-                        const char* geoCodeStr = doc1024["code"];
-                        if (geoCodeStr != NULL && strcmp(geoCodeStr, "200") == 0) {
-                            JsonArray locationArray = doc1024["location"];
-                            if (locationArray.size() > 0) {
-                                JsonObject location = locationArray[0];
-                                locationId = location["id"].as<String>();
-                                city = location["name"].as<String>();
-
-                                Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n",
-                                              locationId.c_str(), city.c_str());
-
-                                https.end();
-                                http.end();
-                                return true;
-                            }
-                        }
-                        Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
+                        Serial.printf("[Weather] 地理查询JSON解析失败: %s\n", geoError.c_str());
+                        https.end();
+                        city = cityName;
+                        locationId = lon + "," + lat;
+                        return true;
                     }
+
+                    const char* geoCodeStr = doc["code"];
+                    if (geoCodeStr != NULL && strcmp(geoCodeStr, "200") == 0) {
+                        JsonArray locationArray = doc["location"];
+                        if (locationArray.size() > 0) {
+                            JsonObject location = locationArray[0];
+                            locationId = location["id"].as<String>();
+                            city = location["name"].as<String>();
+
+                            Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n",
+                                          locationId.c_str(), city.c_str());
+
+                            https.end();
+                            return true;
+                        }
+                    }
+                    Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
+                    https.end();
+                } else {
+                    Serial.println("[Weather] 地理查询gzip解压失败");
                     https.end();
                 }
             } else {
-                Serial.printf("[Weather] 地理查询响应大小异常: %d\n", len);
+                Serial.println("[Weather] 地理查询非gzip格式，直接解析");
+
+                doc.clear();
+                DeserializationError geoError = deserializeJson(doc, (const char*)compressedData);
+
+                if (geoError) {
+                    Serial.printf("[Weather] 地理查询JSON解析失败: %s\n", geoError.c_str());
+                } else {
+                    const char* geoCodeStr = doc["code"];
+                    if (geoCodeStr != NULL && strcmp(geoCodeStr, "200") == 0) {
+                        JsonArray locationArray = doc["location"];
+                        if (locationArray.size() > 0) {
+                            JsonObject location = locationArray[0];
+                            locationId = location["id"].as<String>();
+                            city = location["name"].as<String>();
+
+                            Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n",
+                                          locationId.c_str(), city.c_str());
+
+                            https.end();
+                            return true;
+                        }
+                    }
+                    Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
+                }
                 https.end();
             }
         } else {
-            Serial.printf("[Weather] 地理查询失败: %d\n", geoCode);
+            Serial.printf("[Weather] 地理查询响应大小异常: %d\n", len);
             https.end();
         }
-        http.end();
     } else {
-        Serial.printf("[Weather] IP定位请求失败: %d\n", httpCode);
-        http.end();
+        Serial.printf("[Weather] 地理查询失败: %d\n", geoCode);
+        https.end();
     }
-    
-    Serial.println("[Weather] IP定位失败，使用默认LOCATION");
-    locationId = LOCATION;
-    return false;
+
+    // QWeather 地理查询失败，降级使用 IP 坐标
+    city = cityName;
+    locationId = lon + "," + lat;
+    Serial.println("[Weather] 使用IP定位数据作为降级方案");
+    return true;
 }
 
 const String& WeatherManager::getLocationId() const {

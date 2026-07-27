@@ -57,6 +57,10 @@ private:
     // 天气状态
     bool _ipLocationDone = false;
     bool _cityInfoDone = false;
+    int _ipLocationFailCount = 0;
+    unsigned long _lastIpLocationAttempt = 0;
+    const unsigned long IP_RETRY_BASE_MS = 10 * 1000;    // 10s 起步
+    const unsigned long IP_RETRY_MAX_MS = 5 * 60 * 1000;  // 最长 5 分钟
     const unsigned long CURRENT_WEATHER_MIN_INTERVAL_MS = 10 * 60 * 1000; // 当前天气10分钟最小间隔
     const unsigned long FORECAST_MIN_INTERVAL_MS = 60 * 60 * 1000;       // 天气预报1小时最小间隔
     

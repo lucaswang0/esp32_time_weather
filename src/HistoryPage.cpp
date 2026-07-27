@@ -21,14 +21,29 @@ HistoryPage::HistoryPage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
     // 数据加载延后到 onEnter() 中执行
 }
 
+HistoryPage::~HistoryPage() {
+    if (history != nullptr) {
+        delete[] history;
+        history = nullptr;
+    }
+}
+
 void HistoryPage::onEnter() {
     Serial.println("[HistoryPage] onEnter");
+    if (history == nullptr) {
+        history = new WeatherRecord[MAX_HISTORY_BUFFER]();
+    }
     loadFromSPIFFS();
     // 加载背景图（DisplayManager 内部从 PROGMEM bg2-bg9 选择并加载）
     _display.clearScreen();
     drawStatusBar();
     drawWeatherGraph();
     drawBottomBar();
+}
+
+void HistoryPage::onExit() {
+    // 不释放 history[]：分配后保持到重启，避免反复页面切换导致堆碎片化
+    // 节省体现在 HistoryPage 对象本身缩小了 ~7KB（指针替代数组）
 }
 
 void HistoryPage::update() {
@@ -131,6 +146,8 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
 }
 
 void HistoryPage::saveToSPIFFS() {
+    if (history == nullptr) return;
+    
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
     char filename[32];
@@ -152,6 +169,10 @@ void HistoryPage::saveToSPIFFS() {
 }
 
 void HistoryPage::loadFromSPIFFS() {
+    if (history == nullptr) {
+        Serial.println("[HistoryPage] loadFromSPIFFS: history not allocated, skip");
+        return;
+    }
     historyCount = 0;
     
     time_t now = time(NULL);
@@ -199,6 +220,8 @@ void HistoryPage::loadFromSPIFFS() {
 }
 
 void HistoryPage::drawStatusBar() {
+    if (history == nullptr) return;
+    
     TFT_eSPI& tft = _display.getTFT();
     // 背景图透出，不再 fillRect 覆盖整条状态栏
     // 避免 tft.printf：其内部走 vprintf/vsnprintf 在某些 GCC 实现中栈用量 >2K，
@@ -242,6 +265,8 @@ void HistoryPage::drawStatusBar() {
 }
 
 void HistoryPage::drawWeatherGraph() {
+    if (history == nullptr) return;
+    
     TFT_eSPI& tft = _display.getTFT();
     tft.endWrite();
 

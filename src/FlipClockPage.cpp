@@ -6,9 +6,18 @@
 
 extern TimeManager timeManager;
 
-FlipClockPage::FlipClockPage(DisplayManager& display) 
+static uint16_t _scale_buf[SCREEN_WIDTH];
+static uint16_t _mono_buf[17 * 14];  // CW * HALF
+
+static void convert_to_mono(const uint16_t* src, uint16_t* dst, int count) {
+    for (int i = 0; i < count; i++) {
+        dst[i] = (src[i] == 0x18C3) ? 0x0000 : 0xFFFF;
+    }
+}
+
+FlipClockPage::FlipClockPage(DisplayManager& display)
     : _display(display), _sprite(nullptr), _sprite_ok(false), _sprite_x(0), _sprite_y(0),
-      _next_second(0), _next_render(0) {
+      _next_render(0), _vis_scale(2) {
 }
 
 FlipClockPage::~FlipClockPage() {
@@ -18,61 +27,313 @@ FlipClockPage::~FlipClockPage() {
     }
 }
 
-void FlipClockPage::onEnter() {
-    Serial.println("[FlipClockPage] Entering flip clock page");
-    
-    calc_layout();
-    Serial.printf("[FlipClockPage] digit_x: [%d,%d,%d,%d,%d,%d], colon_x: [%d,%d]\n",
-                  digit_x[0], digit_x[1], digit_x[2], digit_x[3], digit_x[4], digit_x[5],
-                  colon_x[0], colon_x[1]);
-    build_flip_table();
-    init_time();
-    Serial.printf("[FlipClockPage] init_time digits: cur=[%d,%d,%d,%d,%d,%d]\n",
-                  digits[0].cur, digits[1].cur, digits[2].cur,
-                  digits[3].cur, digits[4].cur, digits[5].cur);
-    
-    _next_second = 0;
-    _next_render = 0;
+void FlipClockPage::calc_layout() {
+    int group_w = CW * 2 + GAP;
+    int colon_gap = GAP + COLON_W + GAP;
+    int total_w = group_w * 3 + colon_gap * 2;
 
-    // 视觉布局尺寸: digit_x[0]+CW-digit_x[5] = 271+48-1 = 318 宽, CH=72 高
-    // Sprite 内部尺寸 = 视觉/2 = 159×36 (~11.5KB, 比原 45.7KB 节省 75%)
-    // 视觉布局不变, pushSprite 时 2× 缩放输出
-    int visual_w = digit_x[0] + CW - digit_x[5];
-    int visual_h = CH;
-    int sprite_w = visual_w / 2;  // 159
-    int sprite_h = visual_h / 2;  // 36
-    _sprite_x = digit_x[5];                        // 1 (视觉位置, pushSprite 用)
-    _sprite_y = (SCREEN_HEIGHT - CH) / 2;          // 49 (视觉位置, pushSprite 用)
+    int start_x = (SCREEN_WIDTH - total_w * _vis_scale) / 2;
+    int start_y = (SCREEN_HEIGHT - CH * _vis_scale) / 2;
 
-    Serial.printf("[FlipClockPage] Sprite: %dx%d (visual %dx%d) at (%d,%d), heap: %d, maxBlock: %d\n",
-                  sprite_w, sprite_h, visual_w, visual_h,
-                  _sprite_x, _sprite_y, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    _digit_x[0] = start_x;
+    _digit_x[1] = start_x + (CW + GAP) * _vis_scale;
+
+    int cx = start_x + group_w * _vis_scale;
+    _colon_x[0] = cx + (GAP + COLON_W / 2) * _vis_scale;
+
+    cx += colon_gap * _vis_scale;
+    _digit_x[2] = cx;
+    _digit_x[3] = cx + (CW + GAP) * _vis_scale;
+
+    cx += group_w * _vis_scale;
+    _colon_x[1] = cx + (GAP + COLON_W / 2) * _vis_scale;
+
+    cx += colon_gap * _vis_scale;
+    _digit_x[4] = cx;
+    _digit_x[5] = cx + (CW + GAP) * _vis_scale;
+
+    _sprite_x = start_x;
+    _sprite_y = start_y;
+}
+
+void FlipClockPage::build_flip_table() {
+    for (int f = 0; f < ANIM_HALF; f++) {
+        float angle = (float)f / ANIM_HALF * (float)M_PI / 2;
+        int vis_val = (int)roundf((float)HALF * cosf(angle));
+        int vis = (vis_val > 1) ? vis_val : 1;
+        float widen = 0.25f * sinf(angle);
+        _flip_table[f].vis = (int8_t)vis;
+
+        for (int i = 0; i < N_STRIPS; i++) {
+            float t = (float)i / N_STRIPS;
+            float sh = (float)vis / N_STRIPS;
+
+            _flip_table[f].upper[i] = {
+                (int8_t)roundf(-vis + i * sh),
+                (int8_t)roundf(-vis + (i + 1) * sh),
+                (int8_t)roundf(widen * CW * (1 - t) / 2)
+            };
+
+            _flip_table[f].lower[i] = {
+                (int8_t)roundf(i * sh),
+                (int8_t)roundf((i + 1) * sh),
+                (int8_t)roundf(widen * CW * t / 2)
+            };
+        }
+    }
+}
+
+void FlipClockPage::update_time() {
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo, 0)) return;
+
+    int h = timeinfo.tm_hour;
+    int m = timeinfo.tm_min;
+    int s = timeinfo.tm_sec;
+
+    int new_digits[6] = {h / 10, h % 10, m / 10, m % 10, s / 10, s % 10};
+
+    for (int i = 0; i < 6; i++) {
+        if (new_digits[i] != _digits[i].cur) {
+            _digits[i].old = _digits[i].cur;
+            _digits[i].cur = new_digits[i];
+            _digits[i].anim_frame = 0;
+        }
+    }
+}
+
+void FlipClockPage::render_card(int idx) {
+    Digit& d = _digits[idx];
+
+    const uint16_t* upper_src = DIGIT_UPPER[d.cur];
+    const uint16_t* lower_src = DIGIT_LOWER[d.cur];
+    const uint16_t* old_upper_src = DIGIT_UPPER[d.old];
+    const uint16_t* old_lower_src = DIGIT_LOWER[d.old];
+    static uint16_t mono_line[CW];
+
+    if (_sprite_ok) {
+        int wid_x = (_digit_x[idx] - _sprite_x) / _vis_scale;
+
+        convert_to_mono(upper_src, _mono_buf, CW * HALF);
+        _sprite->pushImage(wid_x, 0, CW, HALF, _mono_buf);
+
+        convert_to_mono(lower_src, _mono_buf, CW * HALF);
+        _sprite->pushImage(wid_x, HALF, CW, HALF, _mono_buf);
+
+        if (d.anim_frame < 0 || d.anim_frame >= TOTAL_FRAMES) {
+            if (d.anim_frame >= TOTAL_FRAMES) {
+                d.anim_frame = -1;
+            }
+            return;
+        }
+
+        convert_to_mono(old_lower_src, _mono_buf, CW * HALF);
+        _sprite->pushImage(wid_x, HALF, CW, HALF, _mono_buf);
+
+        if (d.anim_frame < ANIM_HALF) {
+            for (int i = 0; i < N_STRIPS; i++) {
+                int dy_top = HALF + _flip_table[d.anim_frame].upper[i].dy_top;
+                int dy_bot = HALF + _flip_table[d.anim_frame].upper[i].dy_bot;
+                int dst_h = dy_bot - dy_top;
+                if (dst_h < 1) continue;
+
+                int src_row = i;
+                if (src_row < 0) src_row = 0;
+                if (src_row >= HALF) src_row = HALF - 1;
+
+                for (int x = 0; x < CW; x++) {
+                    mono_line[x] = (old_upper_src[src_row * CW + x] == 0x18C3) ? (uint16_t)0x0000 : (uint16_t)0xFFFF;
+                }
+
+                for (int y = 0; y < dst_h; y++) {
+                    if (dy_top + y < 0 || dy_top + y >= CH) continue;
+                    _sprite->pushImage(wid_x, dy_top + y, CW, 1, mono_line);
+                }
+            }
+        } else {
+            int frame = TOTAL_FRAMES - 1 - d.anim_frame;
+            for (int i = 0; i < N_STRIPS; i++) {
+                int dy_top = HALF + _flip_table[frame].lower[i].dy_top;
+                int dy_bot = HALF + _flip_table[frame].lower[i].dy_bot;
+                int dst_h = dy_bot - dy_top;
+                if (dst_h < 1) continue;
+
+                int src_row = i;
+                if (src_row < 0) src_row = 0;
+                if (src_row >= HALF) src_row = HALF - 1;
+
+                for (int x = 0; x < CW; x++) {
+                    mono_line[x] = (lower_src[src_row * CW + x] == 0x18C3) ? (uint16_t)0x0000 : (uint16_t)0xFFFF;
+                }
+
+                for (int y = 0; y < dst_h; y++) {
+                    if (dy_top + y < 0 || dy_top + y >= CH) continue;
+                    _sprite->pushImage(wid_x, dy_top + y, CW, 1, mono_line);
+                }
+            }
+        }
+    } else {
+        auto& tft = _display.getTFT();
+        if (d.anim_frame < 0 || d.anim_frame >= TOTAL_FRAMES) {
+            convert_to_mono(upper_src, _mono_buf, CW * HALF);
+            tft.pushImage(_digit_x[idx], _sprite_y, CW, HALF, _mono_buf);
+            convert_to_mono(lower_src, _mono_buf, CW * HALF);
+            tft.pushImage(_digit_x[idx], _sprite_y + HALF * _vis_scale, CW, HALF, _mono_buf);
+            if (d.anim_frame >= TOTAL_FRAMES) {
+                d.anim_frame = -1;
+            }
+        }
+    }
+}
+
+void FlipClockPage::render_colon(int idx) {
+    if (!_sprite_ok) return;
+
+    int cx = (_colon_x[idx] - _sprite_x) / _vis_scale;
+    int y1 = CH * 3 / 10;
+    int y2 = CH * 7 / 10;
+
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (y1 + dy >= 0 && y1 + dy < CH) {
+                _sprite->drawPixel(cx + dx, y1 + dy, COLON_CLR);
+            }
+            if (y2 + dy >= 0 && y2 + dy < CH) {
+                _sprite->drawPixel(cx + dx, y2 + dy, COLON_CLR);
+            }
+        }
+    }
+}
+
+void FlipClockPage::render_frame() {
+    if (!_sprite_ok) return;
+
+    _sprite->fillSprite(BG_COLOR);
+
+    for (int i = 0; i < 6; i++) {
+        render_card(i);
+    }
+
+    for (int i = 0; i < 2; i++) {
+        render_colon(i);
+    }
+}
+
+void FlipClockPage::pushSpriteScaled() {
+    if (!_sprite_ok) return;
 
     auto& tft = _display.getTFT();
+    uint16_t* src = (uint16_t*)_sprite->getPointer();
+    int sp_w = _sprite->width();   // widget width (total widget pixels)
+    int sp_h = _sprite->height();  // widget height (CH=28)
+    int out_w = sp_w * _vis_scale;
+    int out_h = sp_h * _vis_scale;
+
+    tft.startWrite();
+    for (int y = 0; y < sp_h; y++) {
+        uint16_t* sp_row = &src[y * sp_w];
+        for (int x = 0; x < sp_w; x++) {
+            for (int s = 0; s < _vis_scale; s++) {
+                _scale_buf[x * _vis_scale + s] = sp_row[x];
+            }
+        }
+        for (int s = 0; s < _vis_scale; s++) {
+            int dst_y = _sprite_y + y * _vis_scale + s;
+            if (dst_y < 0 || dst_y >= SCREEN_HEIGHT) continue;
+            int dst_x1 = _sprite_x;
+            int dst_x2 = _sprite_x + out_w - 1;
+            if (dst_x1 < 0) dst_x1 = 0;
+            if (dst_x2 >= SCREEN_WIDTH) dst_x2 = SCREEN_WIDTH - 1;
+            tft.setWindow(dst_x1, dst_y, dst_x2, dst_y);
+            int offset = (dst_x1 - _sprite_x) * _vis_scale;
+            int count = (dst_x2 - dst_x1 + 1);
+            tft.pushPixels(&_scale_buf[offset], count);
+        }
+    }
+    tft.endWrite();
+}
+
+void FlipClockPage::onEnter() {
+    Serial.println("[FlipClockPage] Entering flip clock page");
+
+    calc_layout();
+    Serial.printf("[FlipClockPage] digit_x: [%d,%d,%d,%d,%d,%d], colon_x: [%d,%d]\n",
+                  _digit_x[0], _digit_x[1], _digit_x[2], _digit_x[3], _digit_x[4], _digit_x[5],
+                  _colon_x[0], _colon_x[1]);
+
+    build_flip_table();
+
+    struct tm timeinfo;
+    int h = 0, m = 0, s = 0;
+    if (getLocalTime(&timeinfo, 0)) {
+        h = timeinfo.tm_hour;
+        m = timeinfo.tm_min;
+        s = timeinfo.tm_sec;
+    }
+
+    _digits[0] = {(uint8_t)(h / 10), (uint8_t)2, (uint8_t)(h / 10), (int8_t)-1};
+    _digits[1] = {(uint8_t)(h % 10), (uint8_t)9, (uint8_t)(h % 10), (int8_t)-1};
+    _digits[2] = {(uint8_t)(m / 10), (uint8_t)5, (uint8_t)(m / 10), (int8_t)-1};
+    _digits[3] = {(uint8_t)(m % 10), (uint8_t)9, (uint8_t)(m % 10), (int8_t)-1};
+    _digits[4] = {(uint8_t)(s / 10), (uint8_t)5, (uint8_t)(s / 10), (int8_t)-1};
+    _digits[5] = {(uint8_t)(s % 10), (uint8_t)9, (uint8_t)(s % 10), (int8_t)-1};
+
+    Serial.printf("[FlipClockPage] init digits: cur=[%d,%d,%d,%d,%d,%d]\n",
+                  _digits[0].cur, _digits[1].cur, _digits[2].cur,
+                  _digits[3].cur, _digits[4].cur, _digits[5].cur);
+
+    int sprite_w = _digit_x[5] + CW * _vis_scale - _sprite_x;
+    int sprite_h = CH * _vis_scale;
+
+    Serial.printf("[FlipClockPage] target sprite: %dx%d (widget res), heap: %d, maxBlock: %d\n",
+                  sprite_w / _vis_scale, sprite_h / _vis_scale,
+                  ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
+    auto& tft = _display.getTFT();
+    tft.setSwapBytes(false);
+    tft.fillScreen(BG_COLOR);
 
     if (!_sprite) {
         _sprite = new TFT_eSprite(&tft);
     }
 
-    // 安全检查: 最大连续块够不够装 sprite (~11.5KB + pushSprite 缩放临时 ~4KB)
-    if (ESP.getMaxAllocHeap() < (size_t)(sprite_w * sprite_h * 2 + 4096)) {
-        Serial.printf("[FlipClockPage] Sprite too large for heap (need %d, maxBlock %d), fallback\n",
-                      sprite_w * sprite_h * 2, ESP.getMaxAllocHeap());
-        _sprite_ok = false;
-        tft.setSwapBytes(true);
-    } else {
-        _sprite_ok = _sprite->createSprite(sprite_w, sprite_h);
-    }
+    int widget_w = sprite_w / _vis_scale;
+    int widget_h = sprite_h / _vis_scale;
+    _sprite_ok = _sprite->createSprite(widget_w, widget_h);
 
     if (_sprite_ok) {
-        _sprite->setSwapBytes(true);
+        _sprite->setSwapBytes(false);
+        _sprite->fillSprite(BG_COLOR);
+        for (int i = 0; i < 6; i++) render_card(i);
+        for (int i = 0; i < 2; i++) render_colon(i);
+        pushSpriteScaled();
         Serial.printf("[FlipClockPage] Sprite created, heap after: %d\n", ESP.getFreeHeap());
     } else {
         Serial.println("[FlipClockPage] Sprite create FAILED, fallback to direct draw");
-        tft.setSwapBytes(true);
+        _sprite_ok = false;
+        tft.setSwapBytes(false);
+        tft.fillScreen(BG_COLOR);
+        for (int i = 0; i < 6; i++) {
+            auto& d = _digits[i];
+            tft.pushImage(_digit_x[i], _sprite_y, CW, HALF, DIGIT_UPPER[d.cur]);
+            tft.pushImage(_digit_x[i], _sprite_y + HALF * _vis_scale, CW, HALF, DIGIT_LOWER[d.cur]);
+        }
+        for (int i = 0; i < 2; i++) {
+            int cx = _colon_x[i];
+            int y1 = _sprite_y + CH * 3 / 10 * _vis_scale;
+            int y2 = _sprite_y + CH * 7 / 10 * _vis_scale;
+            for (int dy = -_vis_scale; dy <= _vis_scale; dy++) {
+                for (int dx = -_vis_scale; dx <= _vis_scale; dx++) {
+                    if (cx + dx >= 0 && cx < SCREEN_WIDTH) {
+                        tft.drawPixel(cx + dx, y1 + dy, COLON_CLR);
+                        tft.drawPixel(cx + dx, y2 + dy, COLON_CLR);
+                    }
+                }
+            }
+        }
     }
-    
-    tft.fillScreen(BG_COLOR);
+
+    _next_render = 0;
 }
 
 void FlipClockPage::onExit() {
@@ -86,424 +347,37 @@ void FlipClockPage::onExit() {
 
 void FlipClockPage::update() {
     uint32_t now = millis();
-    
-    if (_next_second == 0) _next_second = now + 1000;
-    if ((int32_t)(now - _next_second) >= 0) {
-        _next_second += 1000;
-        sync_time();
-    }
-    
+
     if ((int32_t)(now - _next_render) >= 0) {
         _next_render = now + 1000 / FPS;
-        
-        for (int i = 0; i < 6; i++) {
-            if (digits[i].anim_frame >= 0 && digits[i].anim_frame < TOTAL_FRAMES) {
-                digits[i].anim_frame++;
-            } else if (digits[i].anim_frame >= TOTAL_FRAMES) {
-                digits[i].anim_frame = -1;
-            }
-        }
-        
+
+        update_time();
+
         if (_sprite_ok) {
+            auto& tft = _display.getTFT();
+            tft.setSwapBytes(false);
             render_frame();
-            // TFT_eSPI 2.5.43 不支持 4 参数 pushSprite(x,y,w,h) 缩放输出
-            // 用 setWindow + pushPixels 手动 2× 缩放, 视觉仍是 318×72
-            pushSpriteScaled2x();
+            pushSpriteScaled();
         } else {
             auto& tft = _display.getTFT();
-            tft.fillScreen(BG_COLOR);
             for (int i = 0; i < 6; i++) {
-                render_card(i);
-            }
-            for (int i = 0; i < 2; i++) {
-                render_colon(i);
-            }
-        }
-    }
-}
-
-void FlipClockPage::onTouch(PageTouchType type) {
-}
-
-void FlipClockPage::render_frame() {
-    if (!_sprite_ok) return;
-    
-    _sprite->fillSprite(BG_COLOR);
-    
-    for (int i = 0; i < 6; i++) {
-        render_card(i);
-    }
-    
-    for (int i = 0; i < 2; i++) {
-        render_colon(i);
-    }
-}
-
-void FlipClockPage::calc_layout() {
-    int group_w = CW * 2 + GAP;
-    int colon_gap = GAP + COLON_W + GAP;
-    int total_w = group_w * 3 + colon_gap * 2;
-    
-    int x;
-    if (total_w <= SCREEN_WIDTH) {
-        x = (SCREEN_WIDTH - total_w) / 2;
-    } else {
-        x = 0;
-    }
-    
-    for (int g = 0; g < 3; g++) {
-        digit_x[5 - g * 2] = x;
-        digit_x[4 - g * 2] = x + CW + GAP;
-        x += group_w;
-        if (g < 2) {
-            colon_x[g] = x + GAP + COLON_W / 2;
-            x += colon_gap;
-        }
-    }
-}
-
-void FlipClockPage::build_flip_table() {
-    // 用 sprite 半分辨率常量 (HALF_S=18, CW_S=24), 让 flip_table 直接生成 sprite 坐标
-    // 渲染时 render_trapezoid 不再需要做坐标转换
-    for (int f = 0; f < ANIM_HALF; f++) {
-        float angle = (float)f / ANIM_HALF * (float)M_PI / 2;
-        int vis = max(1, (int)roundf((float)HALF_S * cosf(angle)));
-        float widen = 0.25f * sinf(angle);
-        flip_table[f].vis = (int8_t)vis;
-
-        for (int i = 0; i < N_STRIPS; i++) {
-            float t = (float)i / N_STRIPS;
-            float sh = (float)vis / N_STRIPS;
-
-            flip_table[f].upper[i] = {
-                (int8_t)roundf(-vis + i * sh),
-                (int8_t)roundf(-vis + (i + 1) * sh),
-                (int8_t)roundf(widen * CW_S * (1 - t) / 2)
-            };
-
-            flip_table[f].lower[i] = {
-                (int8_t)roundf(i * sh),
-                (int8_t)roundf((i + 1) * sh),
-                (int8_t)roundf(widen * CW_S * t / 2)
-            };
-        }
-    }
-}
-
-void FlipClockPage::init_time() {
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 0)) {
-        int h = timeinfo.tm_hour;
-        int m = timeinfo.tm_min;
-        int s = timeinfo.tm_sec;
-        
-        digits[0] = {(uint8_t)(s % 10), (uint8_t)9, (uint8_t)(s % 10), (int8_t)-1};
-        digits[1] = {(uint8_t)(s / 10), (uint8_t)5, (uint8_t)(s / 10), (int8_t)-1};
-        digits[2] = {(uint8_t)(m % 10), (uint8_t)9, (uint8_t)(m % 10), (int8_t)-1};
-        digits[3] = {(uint8_t)(m / 10), (uint8_t)5, (uint8_t)(m / 10), (int8_t)-1};
-        digits[4] = {(uint8_t)(h % 10), (uint8_t)9, (uint8_t)(h % 10), (int8_t)-1};
-        digits[5] = {(uint8_t)(h / 10), (uint8_t)2, (uint8_t)(h / 10), (int8_t)-1};
-    } else {
-        for (int i = 0; i < 6; i++) digits[i] = {(uint8_t)0, (uint8_t)9, (uint8_t)0, (int8_t)-1};
-    }
-}
-
-void FlipClockPage::sync_time() {
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo, 0)) return;
-    
-    int h = timeinfo.tm_hour;
-    int m = timeinfo.tm_min;
-    int s = timeinfo.tm_sec;
-    
-    int new_digits[6] = {
-        s % 10,
-        s / 10,
-        m % 10,
-        m / 10,
-        h % 10,
-        h / 10
-    };
-    
-    for (int i = 0; i < 6; i++) {
-        if (new_digits[i] != digits[i].cur) {
-            digits[i].old = digits[i].cur;
-            digits[i].cur = new_digits[i];
-            digits[i].anim_frame = 0;
-        }
-    }
-}
-
-// 把一个源 RGB565 像素渲染到 sprite 位置上, 但**过滤掉源位图底色**
-// 让数字周边在 sprite 内部保持 BG_COLOR (透明效果), 缩放输出后即"黑底".
-//
-// 源位图颜色分布 (digitals.h):
-//   底色: 0x0841 / 0x1082 / 0x10A2 / 0x18C3 (R/G/B max ≤ 12 ≈ 1.5/8)
-//   笔画: 0x2945 / 0x39E7 / 0x6B6D / 0x8C51 / 0xCE79 (R/G/B max ≥ 18 ≈ 2/8)
-// 阈值取 16: max 5-bit 通道 <= 16 当背景过滤掉.
-static inline bool is_source_background(uint16_t px) {
-    // RGB565 高 5 位是亮度, 取 R/G/B 三个 5-bit 通道的最大值
-    uint8_t r5 = (px >> 11) & 0x1F;
-    uint8_t g5 = (px >> 6) & 0x1F;
-    uint8_t b5 = (px >> 0) & 0x1F;
-    uint8_t mx = r5;
-    if (g5 > mx) mx = g5;
-    if (b5 > mx) mx = b5;
-    return mx <= 16;  // 0x18C3 R=3/G=12/B=3 → max=12 ≤ 16 ✓;  0x39E7 max=26 > 16 ✓
-}
-
-void FlipClockPage::push_scaled(int dst_x, int dst_y, int src_w, int src_h, int dst_w, int dst_h, const uint16_t *src, int src_pitch) {
-    if (!_sprite_ok) return;
-
-    int sp_w = _sprite->width();
-    uint16_t* buf = (uint16_t*)_sprite->getPointer();
-    int max_x = dst_w - 1;
-    int max_y = dst_h - 1;
-
-    for (int sy = 0; sy < src_h; sy++) {
-        int dy0 = dst_y + sy * max_y / (src_h - 1);
-        int dy1 = dst_y + (sy + 1) * max_y / (src_h - 1);
-        if (dy0 == dy1) dy1 = dy0 + 1;
-
-        for (int sx = 0; sx < src_w; sx++) {
-            uint16_t raw16 = src[sy * src_pitch + sx];
-
-            // ⭐ 关键: 过滤源位图底色 (0x0841/0x1082/0x10A2/0x18C3)
-            // 不写入 sprite, 保留背景黑色, 数字周边 = 全黑
-            if (is_source_background(raw16)) continue;
-
-            uint16_t pixel = (raw16 >> 8) | (raw16 << 8);
-
-            int dx0 = dst_x + sx * max_x / (src_w - 1);
-            int dx1 = dst_x + (sx + 1) * max_x / (src_w - 1);
-            if (dx0 == dx1) dx1 = dx0 + 1;
-
-            for (int dy = dy0; dy < dy1; dy++) {
-                // ⭐ 关键: 边界检查必须用 sprite 实际高度 CH_S=36, 不能用 dst_h
-                // push_scaled 旧版 (sprite=318x72 时) 用 max_y+1=dst_h=36 凑巧等于 sprite 高度, 没出 bug
-                // 半分辨率 sprite=159x36 后, dst_h=HALF_S=18 但 sprite 高度是 36
-                // 上半 (dst_y=0): dy 0-17, 18 边界 OK
-                // 下半 (dst_y=18): dy 18-35, 旧代码 dy>=18 全部 skip → 下半消失!
-                if (dy < 0 || dy >= CH_S) continue;
-                for (int dx = dx0; dx < dx1; dx++) {
-                    if (dx >= 0 && dx < sp_w) {
-                        buf[dy * sp_w + dx] = pixel;
-                    }
+                auto& d = _digits[i];
+                if (d.anim_frame < 0 || d.anim_frame >= TOTAL_FRAMES) {
+                    tft.pushImage(_digit_x[i], _sprite_y, CW, HALF, DIGIT_UPPER[d.cur]);
+                    tft.pushImage(_digit_x[i], _sprite_y + HALF * _vis_scale, CW, HALF, DIGIT_LOWER[d.cur]);
                 }
             }
         }
-    }
-}
 
-// 替代 TFT_eSprite::pushSprite(x, y, w, h) 缩放输出
-// TFT_eSPI 2.5.43 只支持 2/3/6 参数 pushSprite, 4 参数 (含输出缩放) 是 2.5.44+ 才有
-// 用 setWindow 一次开窗 + pushPixels 逐行写入, 行内手动 2× 复制实现缩放
-// 性能: 36 行 × 2 次 pushPixels = 72 次 SPI 传输, 比 72 次 pushImage 快 (开窗只有 1 次)
-//
-// 字节序说明: sprite buffer 已经是"显示就绪"字节序 (push_scaled 写入时已字节交换)
-// 模仿 _sprite->pushSprite 的做法: 临时 tft.setSwapBytes(false) 让 pushPixels 直发
-// 此时 buffer 里的 [low,high] 内存顺序正好 = 显示器期望的 [high,low] 接收顺序
-void FlipClockPage::pushSpriteScaled2x() {
-    if (!_sprite_ok) return;
-
-    int sw = _sprite->width();   // 159
-    int sh = _sprite->height();  // 36
-    int dw = sw * 2;             // 318
-    int dh = sh * 2;             // 72
-
-    auto& tft = _display.getTFT();
-    uint16_t* src = (uint16_t*)_sprite->getPointer();
-
-    // 临时关闭 swapBytes (与 _sprite->pushSprite 内部行为一致), 退出前恢复
-    bool oldSwapBytes = tft.getSwapBytes();
-    tft.setSwapBytes(false);
-
-    // ⭐ 关键: startWrite/endWrite 包裹, 拉低 CS 让 SPI 数据真的能到 display
-    // setWindow 注释明确说 "begin_tft_write() must be called before setWindow"
-    // 否则 CS 一直高, display 静默丢弃所有 pushPixels 数据
-    tft.startWrite();
-
-    // 一次性开窗覆盖整个 2× 输出区域
-    tft.setWindow(_sprite_x, _sprite_y, _sprite_x + dw - 1, _sprite_y + dh - 1);
-
-    // 行缓冲区 (栈分配, 320 像素 = 640 字节, 足够装 318 像素的 2× 行)
-    uint16_t row_buf[SCREEN_WIDTH];
-
-    for (int sy = 0; sy < sh; sy++) {
-        uint16_t* sp = &src[sy * sw];
-        // 横向 2× 复制 (sprite buffer 已是显示就绪字节序, 直接复制即可)
-        for (int i = 0; i < sw; i++) {
-            row_buf[i * 2]     = sp[i];
-            row_buf[i * 2 + 1] = sp[i];
-        }
-        // 纵向 2× 复制: 同一行写 2 次
-        tft.pushPixels(row_buf, dw);
-        tft.pushPixels(row_buf, dw);
-    }
-
-    tft.endWrite();
-    tft.setSwapBytes(oldSwapBytes);
-}
-
-void FlipClockPage::render_card(int idx) {
-    Digit &d = digits[idx];
-    // cx 在 sprite 内部坐标 = (视觉位置差) / 2
-    int cx = _sprite_ok ? (digit_x[idx] - _sprite_x) / 2 : digit_x[idx];
-    int scr_cx = digit_x[idx];
-    int scr_cy = (SCREEN_HEIGHT - CH) / 2;
-
-    if (d.anim_frame < 0 || d.anim_frame >= TOTAL_FRAMES) {
-        if (_sprite_ok) {
-            push_scaled(cx, 0,       SRC_W, SRC_HALF, CW_S, HALF_S, (uint16_t*)DIGIT_UPPER[d.cur], SRC_W);
-            push_scaled(cx, HALF_S,  SRC_W, SRC_HALF, CW_S, HALF_S, (uint16_t*)DIGIT_LOWER[d.cur], SRC_W);
-        } else {
-            auto& tft = _display.getTFT();
-            tft.pushImage(scr_cx, scr_cy, SRC_W, SRC_HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
-            tft.pushImage(scr_cx, scr_cy + SRC_HALF, SRC_W, SRC_HALF, (uint16_t*)DIGIT_LOWER[d.cur]);
-        }
-
-        if (d.anim_frame >= TOTAL_FRAMES) {
-            d.anim_frame = -1;
-        }
-        return;
-    }
-
-    if (_sprite_ok) {
-        push_scaled(cx, 0,       SRC_W, SRC_HALF, CW_S, HALF_S, (uint16_t*)DIGIT_UPPER[d.cur], SRC_W);
-        push_scaled(cx, HALF_S,  SRC_W, SRC_HALF, CW_S, HALF_S, (uint16_t*)DIGIT_LOWER[d.old], SRC_W);
-
-        if (d.anim_frame < ANIM_HALF) {
-            render_trapezoid(cx, DIGIT_UPPER[d.old], flip_table[d.anim_frame].upper);
-        } else {
-            render_trapezoid(cx, DIGIT_LOWER[d.cur], flip_table[TOTAL_FRAMES - 1 - d.anim_frame].lower);
-        }
-    } else {
-        auto& tft = _display.getTFT();
-        tft.pushImage(scr_cx, scr_cy, SRC_W, SRC_HALF, (uint16_t*)DIGIT_UPPER[d.cur]);
-        tft.pushImage(scr_cx, scr_cy + SRC_HALF, SRC_W, SRC_HALF, (uint16_t*)DIGIT_LOWER[d.old]);
-    }
-}
-
-void FlipClockPage::render_trapezoid(int cx, const uint16_t *src, const StripEntry *strips) {
-    if (!_sprite_ok) return;
-
-    int sp_w = _sprite->width();
-    uint16_t* buf = (uint16_t*)_sprite->getPointer();
-    int max_x = CW_S - 1;
-
-    for (int i = 0; i < N_STRIPS; i++) {
-        int dy_top = HALF_S + strips[i].dy_top;
-        int dy_bot = HALF_S + strips[i].dy_bot;
-        int dst_h = dy_bot - dy_top;
-
-        if (dst_h < 1) {
-            dy_bot = dy_top + 1;
-            dst_h = 1;
-        }
-
-        int mid = dst_h >> 1;
-        int ext = strips[i].ext;
-
-        for (int y = 0; y < dst_h; y++) {
-            int dst_row = dy_top + y;
-
-            if (dst_row < 0 || dst_row >= CH_S) continue;
-
-            int src_row = 2 * i + ((y < mid) ? 0 : 1);
-
-            for (int x = 0; x < SRC_W; x++) {
-                uint16_t raw = src[src_row * SRC_W + x];
-
-                // ⭐ 与 push_scaled 一致: 过滤源位图底色, 翻页过程显示区域保持黑色
-                if (is_source_background(raw)) continue;
-
-                uint16_t pixel = (raw >> 8) | (raw << 8);
-                int dx0 = cx + x * max_x / (SRC_W - 1);
-                int dx1 = cx + (x + 1) * max_x / (SRC_W - 1);
-                if (dx0 == dx1) dx1 = dx0 + 1;
-
-                int dy0 = dst_row;
-                int dy1 = dst_row + 1;
-                if (dy0 == dy1) dy1 = dy0 + 1;
-
-                for (int dy = dy0; dy < dy1; dy++) {
-                    if (dy < 0 || dy >= CH_S) continue;
-                    for (int dx = dx0; dx < dx1; dx++) {
-                        if (dx >= 0 && dx < sp_w) {
-                            buf[dy * sp_w + dx] = pixel;
-                        }
-                    }
-                }
-            }
-
-            int ext_dx_start = cx + CW_S;
-            int ext_dx_end = ext_dx_start + (ext * (CW_S - 1)) / (SRC_W - 1);
-            for (int dx = ext_dx_start; dx < ext_dx_end && dx < sp_w; dx++) {
-                int dy0 = dst_row;
-                int dy1 = dst_row + 1;
-                if (dy0 == dy1) dy1 = dy0 + 1;
-                for (int dy = dy0; dy < dy1; dy++) {
-                    if (dy >= 0 && dy < CH_S) {
-                        buf[dy * sp_w + dx] = (uint16_t)((BG_COLOR >> 8) | (BG_COLOR << 8));
-                    }
-                }
+        for (int i = 0; i < 6; i++) {
+            if (_digits[i].anim_frame >= 0 && _digits[i].anim_frame < TOTAL_FRAMES) {
+                _digits[i].anim_frame++;
+            } else if (_digits[i].anim_frame >= TOTAL_FRAMES) {
+                _digits[i].anim_frame = -1;
             }
         }
     }
 }
 
-void FlipClockPage::render_colon(int idx) {
-    // cx 在 sprite 内部坐标 = (视觉位置差) / 2
-    int cx = _sprite_ok ? (colon_x[idx] - _sprite_x) / 2 : colon_x[idx];
-    int scr_cx = colon_x[idx];
-    int scr_cy = (SCREEN_HEIGHT - CH) / 2;
-    int y1 = CH * 3 / 10;
-    int y2 = CH * 7 / 10;
-    int r = 3;
-
-    // 关键修复 (2026-07-26): 冒号被拉长问题
-    // - 上一版 dx 用 (CW_S-1)/(SRC_W-1) ≈ 0.74 但 dy 用 (CH_S-1)/(HALF_S-1) ≈ 2.06
-    //   → sprite 内圆变成"纵向 12.4 像素 × 横向 4.4 像素"椭圆 (横纵比不一致)
-    // - 2x pushSprite 缩放后视觉上"拉长"
-    // 修复: dx, dy 用同一个缩放因子, 即 (CW_S-1)/(SRC_W-1), 横纵比 1:1
-    //
-    // 圆心 y 坐标: 视觉 y1=21, y2=50 → sprite y1_s=10, y2_s=25 (CH_S=36 内)
-    // 半分辨率 sprite 高 36, 圆心相距 15 像素 → 缩放后屏幕相距 30 屏像素 (合理)
-    int r_s = r * (CW_S - 1) / (SRC_W - 1);  // sprite 像素半径
-    if (r_s < 1) r_s = 1;
-    int y1_s = CH_S * 3 / 10;  // 10
-    int y2_s = CH_S * 7 / 10;  // 25
-
-    if (_sprite_ok) {
-        // 圆点在 sprite 中画
-        // 先清掉之前的, 用 fillSprite 已铺 BG, 直接 drawPixel 即可
-        for (int dy = -r_s - 1; dy <= r_s + 1; dy++) {
-            for (int dx = -r_s - 1; dx <= r_s + 1; dx++) {
-                if (dx * dx + dy * dy > r_s * r_s) continue;
-
-                int fx = cx + dx;
-                int fy1 = y1_s + dy;
-                int fy2 = y2_s + dy;
-                if (fx >= 0 && fx < _sprite->width()) {
-                    if (fy1 >= 0 && fy1 < CH_S) _sprite->drawPixel(fx, fy1, COLON_CLR);
-                    if (fy2 >= 0 && fy2 < CH_S) _sprite->drawPixel(fx, fy2, COLON_CLR);
-                }
-            }
-        }
-    } else {
-        auto& tft = _display.getTFT();
-        
-        for (int dy = -r; dy <= r; dy++) {
-            for (int dx = -r; dx <= r; dx++) {
-                if (dx * dx + dy * dy > r * r + 1) continue;
-                
-                if (scr_cy + y1 + dy >= 0 && scr_cy + y1 + dy < SCREEN_HEIGHT) {
-                    tft.drawPixel(scr_cx + dx, scr_cy + y1 + dy, COLON_CLR);
-                }
-                if (scr_cy + y2 + dy >= 0 && scr_cy + y2 + dy < SCREEN_HEIGHT) {
-                    tft.drawPixel(scr_cx + dx, scr_cy + y2 + dy, COLON_CLR);
-                }
-            }
-        }
-    }
+void FlipClockPage::onTouch(PageTouchType /*type*/) {
 }

@@ -33,7 +33,7 @@ void TaskManager::begin() {
     xTaskCreatePinnedToCore(
         taskWiFiWrapper,
         "TaskWiFi",
-        4096,
+        2048,        // HWM 552B → 2.7x 余量
         this,
         3,
         &_taskWiFi,
@@ -44,7 +44,7 @@ void TaskManager::begin() {
     xTaskCreatePinnedToCore(
         taskTimeSyncWrapper,
         "TaskTimeSync",
-        4096,
+        3072,        // HWM 1684B → 1.8x 余量 (SNTP 栈需求较高)
         this,
         4,
         &_taskTimeSync,
@@ -52,12 +52,11 @@ void TaskManager::begin() {
     );
     
     // 天气更新任务 - 1小时间隔（但包含多个步骤）
-    // 栈 16384 (16KB) 修复 Store access fault: HTTPS 期间 mbedTLS 握手 + JWT 生成
-    // + 多 String 局部变量 累计栈使用峰值 6-8KB，8KB 容易在临界状态溢出踩坏其他内存
+    // HWM 4100B (after stage4) → 2x 余量 → 8192B
     xTaskCreatePinnedToCore(
         taskWeatherWrapper,
         "TaskWeather",
-        16384,       // 8KB → 16KB（HTTPS 安全裕量）
+        8192,
         this,
         4,
         &_taskWeather,
@@ -65,13 +64,10 @@ void TaskManager::begin() {
     );
     
     // 传感器读取任务 - 5秒间隔
-    // 栈 4096 (4KB) 修复: 实测 2KB 栈使用率 94.7% (剩 108B)
-    // 根因: Serial.printf 内部 vprintf 占用 ~1.5KB 栈, readAHT20 + readBMP280 两个 printf 累计 ~3KB
-    // (加上 I2C 局部变量 + Wire 库 buffer 实际 ~1.9KB, 2KB 栈临界, 任何中断嵌套都会溢出)
     xTaskCreatePinnedToCore(
         taskSensorsWrapper,
         "TaskSensors",
-        4096,        // 2KB → 4KB（4 倍安全裕量）
+        3072,        // HWM 1928B → 1.6x 余量
         this,
         5,
         &_taskSensors,
@@ -82,7 +78,7 @@ void TaskManager::begin() {
     xTaskCreatePinnedToCore(
         taskHistoryWrapper,
         "TaskHistory",
-        4096,
+        3072,        // HWM 1640B → 1.9x 余量
         this,
         5,
         &_taskHistory,
@@ -93,7 +89,7 @@ void TaskManager::begin() {
     xTaskCreatePinnedToCore(
         taskTimeDisplayWrapper,
         "TimeDisplay",
-        8192,
+        4096,        // HWM 1604B → 2.6x 余量
         this,
         2,
         &_taskTimeDisplay,
@@ -118,12 +114,12 @@ void TaskManager::printMemoryUsage(const char* tag) {
         uint32_t size;
     };
     TaskInfo tasks[] = {
-        {_taskWiFi,        "TaskWiFi",     4096},
-        {_taskTimeSync,    "TaskTimeSync", 4096},
-        {_taskWeather,     "TaskWeather",  16384},
-        {_taskSensors,     "TaskSensors",  4096},
-        {_taskHistory,     "TaskHistory",  4096},
-        {_taskTimeDisplay, "TimeDisplay",  8192},
+        {_taskWiFi,        "TaskWiFi",     2048},
+        {_taskTimeSync,    "TaskTimeSync", 3072},
+        {_taskWeather,     "TaskWeather",  8192},
+        {_taskSensors,     "TaskSensors",  3072},
+        {_taskHistory,     "TaskHistory",  3072},
+        {_taskTimeDisplay, "TimeDisplay",  4096},
     };
 
     uint32_t totalAlloc = 0;
@@ -365,8 +361,18 @@ void TaskManager::taskWeather() {
                     return true;
                 }
                 if (i == 0 || i == 5 || i == 10) {
-                    Serial.printf("[TaskWeather] 堆碎片化, 最大连续块: %u B, 需 %u B, 等待中...\n",
+                    Serial.printf("[TaskWeather] 堆碎片化, 最大连续块: %u B, 需 %u B, 尝试整理...\n",
                                   maxAlloc, needBytes);
+                    // 强制整理：分配最大块后立即释放，触发 FreeRTOS 完整合并
+                    void* ptr = malloc(maxAlloc);
+                    if (ptr) {
+                        free(ptr);
+                        size_t afterCompact = ESP.getMaxAllocHeap();
+                        if (afterCompact > maxAlloc) {
+                            Serial.printf("[TaskWeather] 整理后: %u → %u B (合并 %u B)\n",
+                                          maxAlloc, afterCompact, afterCompact - maxAlloc);
+                        }
+                    }
                 }
                 vTaskDelay(pdMS_TO_TICKS(1000));
             }
@@ -377,16 +383,34 @@ void TaskManager::taskWeather() {
 
         // 阶段一：IP定位（仅获取一次，成功后不再获取）
         if (!_ipLocationDone && _wifiManager.isConnected()) {
+            // 退避计算：failCount=0→10s, 1→20s, 2→40s, ... 封顶 5 分钟
+            unsigned long retryDelay = IP_RETRY_BASE_MS;
+            for (int i = 0; i < _ipLocationFailCount && retryDelay < IP_RETRY_MAX_MS; i++) {
+                retryDelay *= 2;
+            }
+            if (retryDelay > IP_RETRY_MAX_MS) retryDelay = IP_RETRY_MAX_MS;
+
+            if (now - _lastIpLocationAttempt < retryDelay) {
+                // 未到重试时间，跳过本阶段
+                vTaskDelayUntil(&xLastWakeTime, xFrequency);
+                continue;
+            }
+
             if (!waitForHeap(24 * 1024)) {
                 vTaskDelayUntil(&xLastWakeTime, xFrequency);
                 continue;
             }
-            Serial.println("[TaskWeather] 阶段一: 通过IP获取定位");
+            _lastIpLocationAttempt = now;
+            Serial.printf("[TaskWeather] 阶段一: 通过IP获取定位 (退避 %lus, 累计失败 %d)\n",
+                          retryDelay / 1000, _ipLocationFailCount);
             if (_weatherManager.fetchLocationByIP()) {
                 Serial.println("[TaskWeather] IP定位成功");
                 _ipLocationDone = true;
+                _ipLocationFailCount = 0;
             } else {
-                Serial.println("[TaskWeather] IP定位失败，下次任务时重试");
+                _ipLocationFailCount++;
+                Serial.printf("[TaskWeather] IP定位失败 (累计 %d 次), %lus 后重试\n",
+                              _ipLocationFailCount, retryDelay / 1000);
             }
             printHwm("stage1 IP-location");
             vTaskDelayUntil(&xLastWakeTime, xFrequency);
