@@ -85,38 +85,23 @@ static void setBacklightLevel(int level) {
     ledcWrite(BACKLIGHT_CHANNEL, level);
 }
 
-static int parseTimeToMinutes(const String& timeStr) {
-    if (timeStr.length() < 5) return -1;
-    int colon = timeStr.indexOf(':');
-    if (colon <= 0) return -1;
-    int hour = timeStr.substring(0, colon).toInt();
-    int minute = timeStr.substring(colon + 1).toInt();
-    return hour * 60 + minute;
-}
-
+// 按时段自动调光 (参考 screen_st7735 项目 taskBacklight)
+// 时段→等级映射 (BACKLIGHT_LEVELS 共 4 档: 10/80/160/255):
+//   06-08: level 1 (晨间, 80)
+//   08-18: level 2 (白天, 160)
+//   18-20: level 1 (傍晚, 80)
+//   20-22: level 1 (夜间, 80)
+//   其他:   level 0 (深夜, 10)
 static int calculateAutoBrightness() {
-    const DailyForecast& today = weatherManager.getForecast(0);
-    int sunrise = parseTimeToMinutes(today.sunrise);
-    int sunset = parseTimeToMinutes(today.sunset);
-    
-    if (sunrise < 0 || sunset < 0) {
-        Serial.println("[Brightness] 日出日落数据不可用");
-        return -1;
-    }
-    
-    int nowMinutes = timeManager.getHour() * 60 + timeManager.getMinute();
-    int sunriseMinus30 = sunrise - 30;
-    int sunsetPlus30 = sunset + 30;
-    
-    Serial.printf("[Brightness] 日出:%d 日落:%d 当前:%d\n", sunrise, sunset, nowMinutes);
-    
-    if (nowMinutes >= sunriseMinus30 && nowMinutes < sunset) {
-        return 2;
-    } else if (nowMinutes >= sunset && nowMinutes < sunsetPlus30) {
-        return 1;
-    } else {
-        return 0;
-    }
+    int h = timeManager.getHour();
+    int target;
+    if      (h >= 6  && h < 8)  target = 1;
+    else if (h >= 8  && h < 18) target = 2;
+    else if (h >= 18 && h < 22) target = 1;
+    else                        target = 0;
+
+    Serial.printf("[Brightness] 当前小时:%d 等级:%d\n", h, target);
+    return target;
 }
 
 static void handleTouchEvent(TouchType type) {
@@ -383,19 +368,35 @@ void handleChime() {
     }
 }
 
+// 背光自动调光: NTP 未同步前固定 80% (PWM=204), 同步后每 60 秒按时间段分档
+// 不依赖网络, 只需 NTP 同步过一次即可使用本地时间
 void handleBrightness(unsigned long now) {
-    if (now - lastAutoBrightnessCheck >= 60000) {
-        lastAutoBrightnessCheck = now;
-        if (wifiManager.isConnected()) {
-            int targetLevel = calculateAutoBrightness();
-            if (targetLevel >= 0 && targetLevel != currentBacklightLevel) {
-                int oldLevel = currentBacklightLevel;
-                currentBacklightLevel = targetLevel;
-                setBacklightLevel(BACKLIGHT_LEVELS[currentBacklightLevel]);
-                Serial.printf("[Brightness] Auto: %d -> %d\n", 
-                    BACKLIGHT_LEVELS[oldLevel], BACKLIGHT_LEVELS[currentBacklightLevel]);
-            }
+    if (now - lastAutoBrightnessCheck < 60000) {
+        yield();
+        return;
+    }
+    lastAutoBrightnessCheck = now;
+
+    // NTP 未同步前维持 80% 亮度 (PWM = 80 * 255 / 100 ≈ 204)
+    if (taskManager == nullptr || !taskManager->isTimeSynced()) {
+        const int pwm80 = (80 * 255 + 50) / 100;
+        if (currentBacklightLevel != -1) {
+            currentBacklightLevel = -1;  // 标记为未同步默认态, 同步后必触发切换
+            setBacklightLevel(pwm80);
+            Serial.printf("[Brightness] NTP 未同步, 默认 80%% (PWM=%d)\n", pwm80);
         }
+        yield();
+        return;
+    }
+
+    int targetLevel = calculateAutoBrightness();
+    if (targetLevel != currentBacklightLevel) {
+        int oldLevel = currentBacklightLevel;
+        currentBacklightLevel = targetLevel;
+        setBacklightLevel(BACKLIGHT_LEVELS[currentBacklightLevel]);
+        Serial.printf("[Brightness] Auto: %d -> %d\n",
+            (oldLevel >= 0) ? BACKLIGHT_LEVELS[oldLevel] : -1,
+            BACKLIGHT_LEVELS[currentBacklightLevel]);
     }
     yield();
 }
