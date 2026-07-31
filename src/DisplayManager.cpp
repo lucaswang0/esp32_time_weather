@@ -38,7 +38,7 @@ void DisplayManager::init() {
     if (lastBgDay > 0) {
         int today = lastBgDay;
         randomSeed(today);
-        currentBgIndex = random(1, 10);
+        currentBgIndex = random(1, 6);
         Serial.printf("[Display] Time synced, selecting background for day %d: bg%d\n", today, currentBgIndex);
     } else {
         currentBgIndex = 1;

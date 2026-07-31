@@ -10,13 +10,10 @@
 #include "font_medium_32.h"
 #include "font_small_20.h"
 #include "config.h"
-#include "bg2.h"
 #include "bg3.h"
 #include "bg4.h"
-#include "bg5.h"
 #include "bg6.h"
 #include "bg8.h"
-#include "bg9.h"
 
 extern const int BACKLIGHT_CHANNEL;
 
@@ -73,14 +70,11 @@ public:
 
     static const uint16_t* getBackgroundByIndex(int index) {
         switch (index) {
-            case 1: return bg2;
-            case 2: return bg3;
-            case 3: return bg4;
-            case 4: return bg5;
-            case 5: return bg6;
-            case 6: return bg8;
-            case 7: return bg9;
-            default: return bg2;
+            case 1: return bg3;
+            case 2: return bg4;
+            case 3: return bg6;
+            case 4: return bg8;
+            default: return bg3;
         }
     }
 

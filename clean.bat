@@ -1,15 +1,7 @@
 ﻿@echo off
-chcp 65001 >nul
-
-echo ==============================================
-echo     Weather Clock - Build Script
-echo ==============================================
-echo.
-echo Building firmware for ESP32...
-echo.
-
-cd /d "%~dp0"
-"%HOMEPATH%\.platformio\penv\Scripts\platformio.exe" run --target clean
+set PYTHONLEGACYWINDOWSSTDIO=1
+set PYTHONIOENCODING=utf-8
+"%USERPROFILE%\.platformio\penv\Scripts\platformio.exe" run --target clean 2>&1
 
 echo.
 echo ==============================================

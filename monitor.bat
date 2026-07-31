@@ -1,26 +1,14 @@
 ﻿@echo off
-chcp 65001 >nul
-
-echo ==============================================
-echo     Weather Clock - Monitor Script
-echo ==============================================
-echo.
-echo Starting serial monitor...
-echo.
-
-set "PIO_PATH=%USERPROFILE%\.platformio\penv\Scripts\platformio.exe"
-
-
-cd /d "%~dp0"
-
-"%USERPROFILE%\.platformio\penv\Scripts\platformio.exe" device monitor
+set PYTHONLEGACYWINDOWSSTDIO=1
+set PYTHONIOENCODING=utf-8
+"%USERPROFILE%\.platformio\penv\Scripts\platformio.exe" device monitor 2>&1
 
 echo.
 echo ==============================================
 if %errorlevel% equ 0 (
-    echo Monitor exited successfully!
+    echo Build successful!
 ) else (
-    echo Monitor failed, error code: %errorlevel%
+    echo Build failed, error code: %errorlevel%
 )
 echo ==============================================
 echo.
