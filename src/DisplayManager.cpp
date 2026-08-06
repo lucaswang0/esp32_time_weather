@@ -7,7 +7,7 @@
 #endif
 
 #include "DisplayManager.h"
-#include <SPIFFS.h>
+#include <LittleFS.h>
 
 static fs::File pngFile;
 static TFT_eSPI* pngTft = nullptr;
@@ -265,7 +265,7 @@ void DisplayManager::drawTextWithBgMode(const char* text, int x, int y, uint16_t
 
 void* pngOpen(const char *filename, int32_t *size) {
     Serial.printf("[PNG] Opening: %s\n", filename);
-    pngFile = SPIFFS.open(filename, FILE_READ);
+    pngFile = LittleFS.open(filename, FILE_READ);
     if (!pngFile) {
         Serial.printf("[PNG] File open failed: %s\n", filename);
         *size = 0;
@@ -386,7 +386,7 @@ bool DisplayManager::loadPNGWithBuffer(String filename) {
     uint32_t freeHeap = ESP.getFreeHeap();
     Serial.printf("[Display] 加载前可用内存: %d bytes\n", freeHeap);
     
-    fs::File file = SPIFFS.open(filename, "r");
+    fs::File file = LittleFS.open(filename, "r");
     if (!file) {
         Serial.println("[Display] ❌ 无法打开文件");
         return false;

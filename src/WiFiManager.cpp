@@ -769,7 +769,7 @@ void WiFiManager::handleFS() {
         "h2{color:#fff;border-bottom:1px solid #555}pre{background:#111;padding:8px;border-radius:4px}"
         "input,button{padding:6px;margin:4px 0}button{background:#07c;color:#fff;border:none;border-radius:4px;cursor:pointer}"
         ".saved{color:#0a0}.del{color:#f44;font-size:12px}</style></head><body>";
-    html += "<h2>SPIFFS: " + path + "</h2>";
+    html += "<h2>LittleFS: " + path + "</h2>";
     
     if (path != "/") {
         String parent = path;
@@ -780,7 +780,7 @@ void WiFiManager::handleFS() {
         html += "<a href='/fs?path=" + parent + "'>[返回上级]</a><br>";
     }
     
-    fs::File dir = SPIFFS.open(path);
+    fs::File dir = LittleFS.open(path);
     if (!dir || !dir.isDirectory()) {
         html += "<p>不是目录</p>";
         html += "<hr><a href='/'>Home</a></body></html>";
@@ -823,7 +823,7 @@ void WiFiManager::handleDownload() {
     String path = webServer->arg("path");
     if (path.length() == 0) { webServer->send(404, "text/plain", "路径为空"); return; }
     
-    fs::File f = SPIFFS.open(path);
+    fs::File f = LittleFS.open(path);
     if (!f || f.isDirectory()) { webServer->send(404, "text/plain", "文件不存在"); return; }
     
     String name = path;
@@ -845,7 +845,7 @@ void WiFiManager::handleUpload() {
         String filename = path;
         if (filename != "/") filename += "/";
         filename += up.filename;
-        uploadFile = SPIFFS.open(filename, "w");
+        uploadFile = LittleFS.open(filename, "w");
     } else if (up.status == UPLOAD_FILE_WRITE) {
         if (uploadFile) uploadFile.write(up.buf, up.currentSize);
     } else if (up.status == UPLOAD_FILE_END) {
@@ -862,13 +862,13 @@ void WiFiManager::handleDelete() {
     String path = webServer->arg("path");
     if (path.length() == 0) { webServer->send(400, "text/plain", "路径为空"); return; }
     
-    fs::File f = SPIFFS.open(path);
+    fs::File f = LittleFS.open(path);
     if (!f) { webServer->send(404, "text/plain", "文件不存在"); return; }
     bool isDir = f.isDirectory();
     f.close();
     
-    if (isDir) SPIFFS.rmdir(path);
-    else SPIFFS.remove(path);
+    if (isDir) LittleFS.rmdir(path);
+    else LittleFS.remove(path);
     
     String parent = path;
     if (parent.endsWith("/")) parent = parent.substring(0, parent.length() - 1);

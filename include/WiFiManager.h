@@ -4,7 +4,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 
 #define MAX_WIFI_CREDENTIALS 5
 
@@ -64,7 +64,7 @@ private:
     void connectToWiFi(const char* ssid, const char* password, int timeoutMs);
     void handleSmartConfig();
     
-    // SPIFFS 文件管理相关
+    // LittleFS 文件管理相关
     void startFSWebServer();
     static String sizeStr(uint64_t bytes);
     void handleFS();

@@ -3,7 +3,7 @@
 #include "AHT20BMP280Sensor.h"
 #include "config.h"
 #include <time.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <sys/time.h>
 
 // 中灰背景 (#444444 -> RGB565 0x2108)；黑字改为白色，表现黑底风格
@@ -17,7 +17,7 @@
 
 HistoryPage::HistoryPage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
     : _display(disp), _aht20(aht20), historyCount(0) {
-    // 构造期不调用 loadFromSPIFFS()，SPIFFS 尚未挂载且会占用大栈临时数组
+    // 构造期不调用 loadFromLittleFS()，LittleFS 尚未挂载且会占用大栈临时数组
     // 数据加载延后到 onEnter() 中执行
 }
 
@@ -33,7 +33,7 @@ void HistoryPage::onEnter() {
     if (history == nullptr) {
         history = new WeatherRecord[MAX_HISTORY_BUFFER]();
     }
-    loadFromSPIFFS();
+    loadFromLittleFS();
     // 加载背景图（DisplayManager 内部从 PROGMEM bg2-bg9 选择并加载）
     _display.clearScreen();
     drawStatusBar();
@@ -50,7 +50,7 @@ void HistoryPage::update() {
     // 数据保存已移至 main.cpp 的全局定时任务（每10分钟）
     // 此处负责定时刷新图表：
     //   - 每 1 分钟：重绘一次（状态栏时间、底栏记录数）
-    //   - 每 10 分钟：从 SPIFFS 重载内存中的 history[]，让图表跟随新增数据点
+    //   - 每 10 分钟：从 LittleFS 重载内存中的 history[]，让图表跟随新增数据点
     unsigned long now = millis();
 
     static unsigned long lastReload = 0;
@@ -58,7 +58,7 @@ void HistoryPage::update() {
 
     if (now - lastReload >= 600000) {
         lastReload = now;
-        loadFromSPIFFS();
+        loadFromLittleFS();
     }
 
     if (now - lastRedraw >= 60000) {
@@ -85,7 +85,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
     // Append 模式：不分配 2880 字节栈上数组；只读 4 字节 count，再 seek 到尾部追加。
     // 栈占用：filename(32) + rec(20) = 52 字节，比原 2880+32=2912 减少 56 倍。
     int existingCount = 0;
-    fs::File readFile = SPIFFS.open(filename, FILE_READ);
+    fs::File readFile = LittleFS.open(filename, FILE_READ);
     if (readFile) {
         if (readFile.available() >= (int)sizeof(existingCount)) {
             readFile.read((uint8_t*)&existingCount, sizeof(existingCount));
@@ -114,7 +114,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
     // 导致头部 count 永远保持在第一次写入时的值（=1），记录数显示错误。
     if (!isNewFile) {
         // 已有文件：先以 "r+" 打开，把头部 4 字节 count 覆盖为新值
-        fs::File headFile = SPIFFS.open(filename, "r+");
+        fs::File headFile = LittleFS.open(filename, "r+");
         if (headFile) {
             headFile.seek(0, fs::SeekSet);
             headFile.write((const uint8_t*)&existingCount, sizeof(existingCount));
@@ -126,7 +126,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
     }
 
     // 用 APPEND 模式真实追加 record 到文件末尾
-    fs::File file = SPIFFS.open(filename, FILE_APPEND);
+    fs::File file = LittleFS.open(filename, FILE_APPEND);
     if (!file) {
         Serial.println("[HistoryPage] saveRecordToDailyFile: File open failed (APPEND)");
         return;
@@ -145,7 +145,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
         temp, humidity, pressure, filename, existingCount, MAX_HISTORY_POINTS);
 }
 
-void HistoryPage::saveToSPIFFS() {
+void HistoryPage::saveToLittleFS() {
     if (history == nullptr) return;
     
     time_t now = time(NULL);
@@ -153,9 +153,9 @@ void HistoryPage::saveToSPIFFS() {
     char filename[32];
     strftime(filename, sizeof(filename), "/history_%Y-%m-%d.dat", tm_info);
     
-    fs::File file = SPIFFS.open(filename, FILE_WRITE);
+    fs::File file = LittleFS.open(filename, FILE_WRITE);
     if (!file) {
-        Serial.println("[HistoryPage] saveToSPIFFS: File open failed");
+        Serial.println("[HistoryPage] saveToLittleFS: File open failed");
         return;
     }
     
@@ -165,12 +165,12 @@ void HistoryPage::saveToSPIFFS() {
     }
     
     file.close();
-    Serial.printf("[HistoryPage] saveToSPIFFS: Saved %d records to %s\n", historyCount, filename);
+    Serial.printf("[HistoryPage] saveToLittleFS: Saved %d records to %s\n", historyCount, filename);
 }
 
-void HistoryPage::loadFromSPIFFS() {
+void HistoryPage::loadFromLittleFS() {
     if (history == nullptr) {
-        Serial.println("[HistoryPage] loadFromSPIFFS: history not allocated, skip");
+        Serial.println("[HistoryPage] loadFromLittleFS: history not allocated, skip");
         return;
     }
     historyCount = 0;
@@ -182,9 +182,9 @@ void HistoryPage::loadFromSPIFFS() {
     char filename[32];
     strftime(filename, sizeof(filename), "/history_%Y-%m-%d.dat", tm_info);
     
-    fs::File file = SPIFFS.open(filename, FILE_READ);
+    fs::File file = LittleFS.open(filename, FILE_READ);
     if (!file) {
-        Serial.printf("[HistoryPage] loadFromSPIFFS: 文件不存在 %s\n", filename);
+        Serial.printf("[HistoryPage] loadFromLittleFS: 文件不存在 %s\n", filename);
         return;
     }
     
@@ -197,7 +197,7 @@ void HistoryPage::loadFromSPIFFS() {
     size_t fileSize = file.size();
     size_t expectedSize = sizeof(fileCount) + sizeof(WeatherRecord) * fileCount;
     if (fileCount <= 0 || fileCount > MAX_HISTORY_POINTS || expectedSize > fileSize) {
-        Serial.printf("[HistoryPage] loadFromSPIFFS: fileCount=%d 异常 (%s)，跳过\n", fileCount, filename);
+        Serial.printf("[HistoryPage] loadFromLittleFS: fileCount=%d 异常 (%s)，跳过\n", fileCount, filename);
         file.close();
         return;
     }
@@ -215,8 +215,8 @@ void HistoryPage::loadFromSPIFFS() {
     }
     
     file.close();
-    Serial.printf("[HistoryPage] loadFromSPIFFS: Loaded %d records from %s\n", fileCount, filename);
-    Serial.printf("[HistoryPage] loadFromSPIFFS: Total %d records loaded\n", historyCount);
+    Serial.printf("[HistoryPage] loadFromLittleFS: Loaded %d records from %s\n", fileCount, filename);
+    Serial.printf("[HistoryPage] loadFromLittleFS: Total %d records loaded\n", historyCount);
 }
 
 void HistoryPage::drawStatusBar() {
@@ -399,18 +399,18 @@ void HistoryPage::drawBottomBar() {
 }
 
 void HistoryPage::checkAndCleanOldFiles() {
-    // 检查SPIFFS空间使用情况
-    size_t totalBytes = SPIFFS.totalBytes();
-    size_t usedBytes = SPIFFS.usedBytes();
+    // 检查LittleFS空间使用情况
+    size_t totalBytes = LittleFS.totalBytes();
+    size_t usedBytes = LittleFS.usedBytes();
     float usagePercent = (float)usedBytes / totalBytes * 100;
     
-    Serial.printf("[HistoryPage] SPIFFS usage: %.1f%% (%zu/%zu bytes)\n", usagePercent, usedBytes, totalBytes);
+    Serial.printf("[HistoryPage] LittleFS usage: %.1f%% (%zu/%zu bytes)\n", usagePercent, usedBytes, totalBytes);
     
     // 如果空间使用超过80%，清理最老的文件
     if (usagePercent > 80.0) {
         Serial.println("[HistoryPage] Storage space low, cleaning old files...");
         
-        fs::File root = SPIFFS.open("/");
+        fs::File root = LittleFS.open("/");
         if (!root) {
             Serial.println("[HistoryPage] Failed to open root directory");
             return;
@@ -452,7 +452,7 @@ void HistoryPage::checkAndCleanOldFiles() {
         
         // 删除最老的文件
         if (oldestFile.length() > 0) {
-            if (SPIFFS.remove(oldestFile)) {
+            if (LittleFS.remove(oldestFile)) {
                 Serial.printf("[HistoryPage] Deleted old file: %s\n", oldestFile.c_str());
             } else {
                 Serial.printf("[HistoryPage] Failed to delete: %s\n", oldestFile.c_str());

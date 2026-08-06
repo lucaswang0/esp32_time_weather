@@ -256,7 +256,7 @@ def main():
   python bg_convert.py --screen-size 480x320
   # One-shot screen size (overrides --width/--height)
 
-下一步 / Next step: 运行 'pio run -t uploadfs' 将背景图上传到设备 SPIFFS
+下一步 / Next step: 运行 'pio run -t uploadfs' 将背景图上传到设备 LittleFS
         '''
     )
 
@@ -389,7 +389,7 @@ def main():
     print(f'总大小 / Total: {total_size / 1024:.1f} KB')
     print(f'输出目录 / Output: {os.path.abspath(args.output_dir)}')
     print()
-    print('下一步 / Next: 运行 \'pio run -t uploadfs\' 将背景图上传到设备 SPIFFS')
+    print('下一步 / Next: 运行 \'pio run -t uploadfs\' 将背景图上传到设备 LittleFS')
 
     return 0 if fail == 0 else 1
 

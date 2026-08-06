@@ -180,16 +180,16 @@ void setup() {
     Serial.begin(115200);
     delay(500);
 
-      // ========== 3. 挂载 SPIFFS ==========
-    if (!SPIFFS.begin(true)) {
-        Serial.println("[SPIFFS] Mount Failed - Formatting...");
-        if (!SPIFFS.begin(true)) {
-            Serial.println("[SPIFFS] Format Failed");
+      // ========== 3. 挂载 LittleFS ==========
+    if (!LittleFS.begin(true)) {
+        Serial.println("[LittleFS] Mount Failed - Formatting...");
+        if (!LittleFS.begin(true)) {
+            Serial.println("[LittleFS] Format Failed");
         } else {
-            Serial.println("[SPIFFS] Format Success");
+            Serial.println("[LittleFS] Format Success");
         }
     } else {
-        Serial.println("[SPIFFS] Mount Success");
+        Serial.println("[LittleFS] Mount Success");
     }
 
    // ========== 4. 背光PWM初始化 ==========

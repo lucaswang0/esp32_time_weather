@@ -36,9 +36,9 @@ private:
     void drawStatusBar();
     void drawWeatherGraph();
     void drawBottomBar();
-    void saveToSPIFFS();
+    void saveToLittleFS();
     void saveRecordToDailyFile(float temp, float humidity, float pressure);
-    void loadFromSPIFFS();
+    void loadFromLittleFS();
     void checkAndCleanOldFiles();
 };
 

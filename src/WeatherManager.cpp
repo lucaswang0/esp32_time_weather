@@ -20,6 +20,19 @@ static void restoreBgCacheIfNeeded() {
 }
 static JsonDocument doc;
 
+// 新API月相文本映射为图标代码 (800-807)
+static String moonPhaseToIcon(const String& phase) {
+    if (phase == "new")                return "800";
+    if (phase == "waxing-crescent")    return "801";
+    if (phase == "first-quarter")      return "802";
+    if (phase == "waxing-gibbous")     return "803";
+    if (phase == "full")               return "804";
+    if (phase == "waning-gibbous")     return "805";
+    if (phase == "last-quarter")       return "806";
+    if (phase == "waning-crescent")    return "807";
+    return phase; // 未知值原样返回
+}
+
 WeatherManager::WeatherManager(WiFiManager& wifiManager) : wifiManager(wifiManager), latitude(DEFAULT_LAT), longitude(DEFAULT_LON) {
     if (!sodiumInitialized) {
         if (sodium_init() == 0) {
@@ -448,7 +461,7 @@ bool WeatherManager::fetch3DayForecast() {
                             forecasts[i].sunrise = sr.length() >= 16 ? sr.substring(11, 16) : sr;
                             String ss = day["astro"]["sunset"].as<String>();
                             forecasts[i].sunset = ss.length() >= 16 ? ss.substring(11, 16) : ss;
-                            forecasts[i].moonPhaseIcon = day["astro"]["moonPhase"].as<String>();
+                            forecasts[i].moonPhaseIcon = moonPhaseToIcon(day["astro"]["moonPhase"].as<String>());
 
                             Serial.printf("[Weather] 第%d天: %s %s %s~%s°C 日出:%s 日落:%s 月相:%s\n",
                                          i + 1,
@@ -495,7 +508,7 @@ bool WeatherManager::fetch3DayForecast() {
                                 forecasts[i].sunrise = sr.length() >= 16 ? sr.substring(11, 16) : sr;
                                 String ss = day["astro"]["sunset"].as<String>();
                                 forecasts[i].sunset = ss.length() >= 16 ? ss.substring(11, 16) : ss;
-                                forecasts[i].moonPhaseIcon = day["astro"]["moonPhase"].as<String>();
+                                forecasts[i].moonPhaseIcon = moonPhaseToIcon(day["astro"]["moonPhase"].as<String>());
                             }
                             https.end();
                             return true;

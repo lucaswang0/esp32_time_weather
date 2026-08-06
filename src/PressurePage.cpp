@@ -1,5 +1,5 @@
 #include "PressurePage.h"
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <time.h>
 
 // 与 HistoryPage 中 WeatherRecord 完全兼容的内部结构体
@@ -22,7 +22,7 @@ PressurePage::PressurePage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
 
 void PressurePage::onEnter() {
     Serial.println("[PressurePage] onEnter");
-    // 先刷新历史记录数与3h变化量等显示数据（从 SPIFFS 读取当天文件）
+    // 先刷新历史记录数与3h变化量等显示数据（从 LittleFS 读取当天文件）
     checkAlert();
     // 加载背景图（DisplayManager 内部从 PROGMEM bg2-bg9 选择并加载）
     _display.clearScreen();
@@ -32,7 +32,7 @@ void PressurePage::onEnter() {
 void PressurePage::update() {
     unsigned long now = millis();
 
-    // 每 10 分钟重算 3h 变化量与预警等级（依赖 SPIFFS 中的历史记录）
+    // 每 10 分钟重算 3h 变化量与预警等级（依赖 LittleFS 中的历史记录）
     static unsigned long lastReload = 0;
     if (now - lastReload >= 600000) {
         lastReload = now;
@@ -60,7 +60,7 @@ bool PressurePage::checkAlert() {
     char filename[32];
     strftime(filename, sizeof(filename), "/history_%Y-%m-%d.dat", tm_info);
 
-    fs::File file = SPIFFS.open(filename, FILE_READ);
+    fs::File file = LittleFS.open(filename, FILE_READ);
     if (!file) {
         Serial.printf("[PressurePage] checkAlert: 无法打开文件 %s\n", filename);
         lastChange3h = 0.0f;
@@ -154,7 +154,7 @@ void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
     char filename[32];
     strftime(filename, sizeof(filename), "/history_%Y-%m-%d.dat", tm_info);
 
-    fs::File file = SPIFFS.open(filename, FILE_READ);
+    fs::File file = LittleFS.open(filename, FILE_READ);
     if (!file) {
         // 透明背景绘制"无数据"
         _display.drawTextWithTransparentBgFont("无数据", x + w/2 - 30, y + h/2 - 4, COLOR_WHITE, font_small_20);
