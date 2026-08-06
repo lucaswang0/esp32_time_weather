@@ -11,8 +11,8 @@
 
 static bool sodiumInitialized = false;
 
-static uint8_t compressedData[4096];
-static char decompressed[4096];
+static uint8_t compressedData[6144];
+static char decompressed[6144];
 
 // 静态工具函数：HTTPS 请求完成后恢复背景缓存（已废弃，保留兼容）
 static void restoreBgCacheIfNeeded() {
@@ -20,7 +20,7 @@ static void restoreBgCacheIfNeeded() {
 }
 static JsonDocument doc;
 
-WeatherManager::WeatherManager(WiFiManager& wifiManager) : wifiManager(wifiManager) {
+WeatherManager::WeatherManager(WiFiManager& wifiManager) : wifiManager(wifiManager), latitude(DEFAULT_LAT), longitude(DEFAULT_LON) {
     if (!sodiumInitialized) {
         if (sodium_init() == 0) {
             sodiumInitialized = true;
@@ -161,8 +161,7 @@ bool WeatherManager::fetchCurrentWeather() {
     }
     Serial.println("[Weather] JWT生成成功");
     
-    String currentLocation = locationId.isEmpty() ? LOCATION : locationId;
-    String url = String(QWEATHER_HOST) + "/v7/weather/now?location=" + currentLocation;
+    String url = String(QWEATHER_HOST) + "/weather/v1/current/" + latitude + "/" + longitude;
 
     Serial.println("\n========== 获取当前天气 ==========");
     Serial.println("[Weather] 请求URL: " + url);
@@ -236,19 +235,19 @@ bool WeatherManager::fetchCurrentWeather() {
                             return false;
                         }
                         
-                        const char* code = doc["code"];
-                        if (code == NULL || strcmp(code, "200") != 0) {
-                            Serial.printf("[Weather] API返回错误码: %s\n", code ? code : "NULL");
+                        // 新API无code字段，检查condition是否存在
+                        JsonObject condition = doc["condition"];
+                        if (condition.isNull()) {
+                            Serial.println("[Weather] API返回异常: 缺少condition字段");
                             Serial.println("[Weather] JSON响应内容:");
                             Serial.println(decompressed);
                             https.end();
                             return false;
                         }
-                        
-                        JsonObject now = doc["now"];
-                        temperature = now["temp"].as<String>() + "°C";
-                        weatherText = now["text"].as<String>();
-                        weatherCode = now["icon"].as<String>();
+
+                        temperature = doc["temperature"]["value"].as<String>() + "°C";
+                        weatherText = condition["text"].as<String>();
+                        weatherCode = condition["code"].as<String>();
                         
                         time_t now_t = time(NULL);
                         struct tm timeinfo;
@@ -284,17 +283,16 @@ bool WeatherManager::fetchCurrentWeather() {
                         Serial.print("[Weather] JSON解析失败: ");
                         Serial.println(error.c_str());
                     } else {
-                        const char* code = doc["code"];
-                        if (code != NULL && strcmp(code, "200") == 0) {
-                            JsonObject now = doc["now"];
-                            temperature = now["temp"].as<String>() + "°C";
-                            weatherText = now["text"].as<String>();
-                            weatherCode = now["icon"].as<String>();
+                        JsonObject condition = doc["condition"];
+                        if (!condition.isNull()) {
+                            temperature = doc["temperature"]["value"].as<String>() + "°C";
+                            weatherText = condition["text"].as<String>();
+                            weatherCode = condition["code"].as<String>();
                             Serial.printf("[Weather] 温度: %s\n", temperature.c_str());
                             https.end();
                             return true;
                         } else {
-                            Serial.printf("[Weather] API返回错误码: %s\n", code ? code : "NULL");
+                            Serial.println("[Weather] API返回异常: 缺少condition字段");
                         }
                     }
                 }
@@ -355,8 +353,7 @@ bool WeatherManager::fetch3DayForecast() {
         return false;
     }
     
-    String currentLocation = locationId.isEmpty() ? LOCATION : locationId;
-    String url = String(QWEATHER_HOST) + "/v7/weather/3d?location=" + currentLocation;
+    String url = String(QWEATHER_HOST) + "/weather/v1/daily/" + latitude + "/" + longitude + "?days=3&localTime=true";
     
     Serial.println("\n========== 获取3天天气预报 ==========");
     Serial.println("[Weather] 请求URL: " + url);
@@ -424,28 +421,34 @@ bool WeatherManager::fetch3DayForecast() {
                             return false;
                         }
                         
-                        const char* code = doc["code"];
-                        if (code == NULL || strcmp(code, "200") != 0) {
-                            Serial.printf("[Weather] API返回错误码: %s\n", code ? code : "NULL");
+                        // 新API无code字段，检查days数组是否存在
+                        JsonArray dailyArray = doc["days"];
+                        if (dailyArray.isNull()) {
+                            Serial.println("[Weather] API返回异常: 缺少days字段");
                             https.end();
                             return false;
                         }
-                        
-                        JsonArray dailyArray = doc["daily"];
-                        
+
                         for (int i = 0; i < dailyArray.size() && i < 3; i++) {
                             JsonObject day = dailyArray[i];
 
-                            forecasts[i].date = day["fxDate"].as<String>();
-                            forecasts[i].textDay = day["textDay"].as<String>();
-                            forecasts[i].tempMin = day["tempMin"].as<String>();
-                            forecasts[i].tempMax = day["tempMax"].as<String>();
-                            forecasts[i].humidity = day["humidity"].as<String>();
-                            forecasts[i].windDir = day["windDirDay"].as<String>();
-                            forecasts[i].windScale = day["windScaleDay"].as<String>();
-                            forecasts[i].sunrise = day["sunrise"].as<String>();
-                            forecasts[i].sunset = day["sunset"].as<String>();
-                            forecasts[i].moonPhaseIcon = day["moonPhaseIcon"].as<String>();
+                            // forecastStartTime: "2024-08-10T22:00Z" → "2024-08-10"
+                            String fs = day["forecastStartTime"].as<String>();
+                            forecasts[i].date = fs.length() >= 10 ? fs.substring(0, 10) : fs;
+                            forecasts[i].textDay = day["daytime"]["condition"]["text"].as<String>();
+                            forecasts[i].tempMin = day["temperatureMin"]["value"].as<String>();
+                            forecasts[i].tempMax = day["temperatureMax"]["value"].as<String>();
+                            // humidity为0-1小数，转为百分比
+                            float hum = day["daytime"]["humidity"].as<float>();
+                            forecasts[i].humidity = String((int)(hum * 100));
+                            forecasts[i].windDir = day["daytime"]["wind"]["direction"]["compass"].as<String>();
+                            forecasts[i].windScale = String(day["daytime"]["wind"]["scale"].as<int>());
+                            // sunrise/sunset: "2024-08-11T04:22Z" → "04:22"
+                            String sr = day["astro"]["sunrise"].as<String>();
+                            forecasts[i].sunrise = sr.length() >= 16 ? sr.substring(11, 16) : sr;
+                            String ss = day["astro"]["sunset"].as<String>();
+                            forecasts[i].sunset = ss.length() >= 16 ? ss.substring(11, 16) : ss;
+                            forecasts[i].moonPhaseIcon = day["astro"]["moonPhase"].as<String>();
 
                             Serial.printf("[Weather] 第%d天: %s %s %s~%s°C 日出:%s 日落:%s 月相:%s\n",
                                          i + 1,
@@ -475,21 +478,24 @@ bool WeatherManager::fetch3DayForecast() {
                         Serial.print("[Weather] JSON解析失败: ");
                         Serial.println(error.c_str());
                     } else {
-                        const char* code = doc["code"];
-                        if (code != NULL && strcmp(code, "200") == 0) {
-                            JsonArray dailyArray = doc["daily"];
+                        JsonArray dailyArray = doc["days"];
+                        if (!dailyArray.isNull()) {
                             for (int i = 0; i < dailyArray.size() && i < 3; i++) {
                                 JsonObject day = dailyArray[i];
-                                forecasts[i].date = day["fxDate"].as<String>();
-                                forecasts[i].textDay = day["textDay"].as<String>();
-                                forecasts[i].tempMin = day["tempMin"].as<String>();
-                                forecasts[i].tempMax = day["tempMax"].as<String>();
-                                forecasts[i].humidity = day["humidity"].as<String>();
-                                forecasts[i].windDir = day["windDirDay"].as<String>();
-                                forecasts[i].windScale = day["windScaleDay"].as<String>();
-                                forecasts[i].sunrise = day["sunrise"].as<String>();
-                                forecasts[i].sunset = day["sunset"].as<String>();
-                                forecasts[i].moonPhaseIcon = day["moonPhaseIcon"].as<String>();
+                                String fs = day["forecastStartTime"].as<String>();
+                                forecasts[i].date = fs.length() >= 10 ? fs.substring(0, 10) : fs;
+                                forecasts[i].textDay = day["daytime"]["condition"]["text"].as<String>();
+                                forecasts[i].tempMin = day["temperatureMin"]["value"].as<String>();
+                                forecasts[i].tempMax = day["temperatureMax"]["value"].as<String>();
+                                float hum = day["daytime"]["humidity"].as<float>();
+                                forecasts[i].humidity = String((int)(hum * 100));
+                                forecasts[i].windDir = day["daytime"]["wind"]["direction"]["compass"].as<String>();
+                                forecasts[i].windScale = String(day["daytime"]["wind"]["scale"].as<int>());
+                                String sr = day["astro"]["sunrise"].as<String>();
+                                forecasts[i].sunrise = sr.length() >= 16 ? sr.substring(11, 16) : sr;
+                                String ss = day["astro"]["sunset"].as<String>();
+                                forecasts[i].sunset = ss.length() >= 16 ? ss.substring(11, 16) : ss;
+                                forecasts[i].moonPhaseIcon = day["astro"]["moonPhase"].as<String>();
                             }
                             https.end();
                             return true;
@@ -542,8 +548,7 @@ bool WeatherManager::fetchCityInfo() {
         return false;
     }
     
-    String currentLocation = locationId.isEmpty() ? LOCATION : locationId;
-    String url = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + currentLocation;
+    String url = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + longitude + "%2C" + latitude;
     
     Serial.println("\n========== 获取城市信息 ==========");
     Serial.println("[Weather] 请求URL: " + url);
@@ -702,17 +707,20 @@ bool WeatherManager::fetchLocationByIP() {
 
     Serial.println("\n========== 通过IP获取定位 ==========");
 
-    // 两个 IP 定位服务，主服务失败时自动切换
-    // ip-api.com: 返回中文城市名 (上海市, lat/lon)
-    // ipapi.co:   返回英文城市名 (Shanghai, latitude/longitude) 作为备用
+    // IP 定位服务列表，按优先级排序，前一个失败自动切换下一个
+    // format: 0=ip-api.com, 1=ipapi.co/ipwho.is, 2=freeipapi.com, 3=ipinfo.io
     struct IpService {
         const char* url;
         const char* name;
-        bool isPrimary;
+        int format;
+        bool useHttps;
     };
     IpService services[] = {
-        { "http://ip-api.com/json/?lang=zh-CN", "ip-api.com", true },
-        { "https://ipapi.co/json", "ipapi.co", false },
+        { "http://ip-api.com/json/?lang=zh-CN", "ip-api.com", 0, false },
+        { "https://ipapi.co/json", "ipapi.co", 1, true },
+        { "https://ipwho.is/", "ipwho.is", 1, true },
+        { "https://free.freeipapi.com/api/json", "freeipapi.com", 2, true },
+        { "https://ipinfo.io/json", "ipinfo.io", 3, true },
     };
 
     String cityName, province, lat, lon;
@@ -721,10 +729,17 @@ bool WeatherManager::fetchLocationByIP() {
     for (auto& svc : services) {
         Serial.printf("[Weather] 请求 %s: %s\n", svc.name, svc.url);
 
-        WiFiClient client;
+        WiFiClient tcpClient;
+        WiFiClientSecure tlsClient;
         HTTPClient http;
-        http.begin(client, svc.url);
         http.setTimeout(10000);
+
+        if (svc.useHttps) {
+            tlsClient.setInsecure();
+            http.begin(tlsClient, svc.url);
+        } else {
+            http.begin(tcpClient, svc.url);
+        }
 
         int httpCode = http.GET();
 
@@ -746,8 +761,8 @@ bool WeatherManager::fetchLocationByIP() {
             continue;
         }
 
-        if (svc.isPrimary) {
-            // ip-api.com 格式: {"status":"success", "city":"上海", "regionName":"上海市", "lat":31.24, "lon":121.44}
+        if (svc.format == 0) {
+            // ip-api.com: {"status":"success", "city":"上海", "regionName":"上海市", "lat":31.24, "lon":121.44}
             const char* status = doc["status"];
             if (status == NULL || strcmp(status, "success") != 0) {
                 Serial.printf("[Weather] ip-api.com 状态异常: %s\n", status ? status : "NULL");
@@ -757,11 +772,31 @@ bool WeatherManager::fetchLocationByIP() {
             province = doc["regionName"].as<String>();
             lat = doc["lat"].as<String>();
             lon = doc["lon"].as<String>();
-        } else {
-            // ipapi.co 格式: {"city":"Shanghai", "latitude":31.22, "longitude":121.45}
-            // 无 status 字段，直接检查关键字段
+        } else if (svc.format == 1) {
+            // ipapi.co / ipwho.is: {"city":"Shanghai", "latitude":31.22, "longitude":121.45}
+            // ipwho.is 额外有 success 字段
+            if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
+                Serial.printf("[Weather] %s success=false\n", svc.name);
+                continue;
+            }
             lat = doc["latitude"].as<String>();
             lon = doc["longitude"].as<String>();
+            cityName = doc["city"].as<String>();
+            province = doc["region"].as<String>();
+        } else if (svc.format == 2) {
+            // freeipapi.com: {"cityName":"Shanghai", "regionName":"Shanghai", "latitude":31.24, "longitude":121.44}
+            lat = doc["latitude"].as<String>();
+            lon = doc["longitude"].as<String>();
+            cityName = doc["cityName"].as<String>();
+            province = doc["regionName"].as<String>();
+        } else {
+            // ipinfo.io: {"city":"Shanghai", "region":"Shanghai", "loc":"31.2222,121.4581"}
+            String loc = doc["loc"].as<String>();
+            int comma = loc.indexOf(',');
+            if (comma > 0) {
+                lat = loc.substring(0, comma);
+                lon = loc.substring(comma + 1);
+            }
             cityName = doc["city"].as<String>();
             province = doc["region"].as<String>();
         }
@@ -778,17 +813,21 @@ bool WeatherManager::fetchLocationByIP() {
     }
 
     if (!ipOk) {
-        Serial.println("[Weather] 所有IP定位服务均失败，使用默认LOCATION");
-        locationId = LOCATION;
+        Serial.println("[Weather] 所有IP定位服务均失败，使用默认经纬度");
+        latitude = DEFAULT_LAT;
+        longitude = DEFAULT_LON;
         return false;
     }
+
+    // IP定位成功，保存经纬度
+    latitude = lat;
+    longitude = lon;
 
     // JWT + QWeather 地理查询 (或降级到 IP 坐标)
     String token = generateJWT();
     if (token == "") {
         Serial.println("[Weather] JWT生成失败，使用IP定位数据作为降级方案");
         city = cityName;
-        locationId = lon + "," + lat;
         return true;
     }
 
@@ -800,7 +839,6 @@ bool WeatherManager::fetchLocationByIP() {
     if (maxAlloc < 24 * 1024) {
         Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B), 放弃地理查询\n", maxAlloc);
         city = cityName;
-        locationId = lon + "," + lat;
         return true;
     }
 
@@ -839,7 +877,6 @@ bool WeatherManager::fetchLocationByIP() {
                         Serial.printf("[Weather] 地理查询JSON解析失败: %s\n", geoError.c_str());
                         https.end();
                         city = cityName;
-                        locationId = lon + "," + lat;
                         return true;
                     }
 
@@ -851,7 +888,7 @@ bool WeatherManager::fetchLocationByIP() {
                             locationId = location["id"].as<String>();
                             city = location["name"].as<String>();
 
-                            Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n",
+                            Serial.printf("[Weather] 地理查询成功: %s (城市: %s)\n",
                                           locationId.c_str(), city.c_str());
 
                             https.end();
@@ -881,7 +918,7 @@ bool WeatherManager::fetchLocationByIP() {
                             locationId = location["id"].as<String>();
                             city = location["name"].as<String>();
 
-                            Serial.printf("[Weather] 获取LOCATION ID成功: %s (城市: %s)\n",
+                            Serial.printf("[Weather] 地理查询成功: %s (城市: %s)\n",
                                           locationId.c_str(), city.c_str());
 
                             https.end();
@@ -903,7 +940,6 @@ bool WeatherManager::fetchLocationByIP() {
 
     // QWeather 地理查询失败，降级使用 IP 坐标
     city = cityName;
-    locationId = lon + "," + lat;
     Serial.println("[Weather] 使用IP定位数据作为降级方案");
     return true;
 }

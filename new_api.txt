@@ -1,0 +1,421 @@
+请求URL
+https://abcxyz.qweatherapi.com/airquality/v1/station/{LocationID}?lang=en
+\___/   \____________________/\____________________/\___________/\______/
+scheme           host                  path              path      query
+
+scheme: 仅支持HTTPS协议。
+host: 开发者的API Host，请在控制台-设置中查看。
+path: API的请求路径（或称之为API端点、Endpoint）。
+path params: 路径参数均为必选参数。
+query params: 查询参数，包括必选和可选参数，多个查询参数使用&分割。
+                                                        params     params 
+英文逗号分隔的经度,纬度坐标
+
+
+城市搜索
+curl -X GET --compressed \
+-H 'Authorization: Bearer your_token' \
+'https://your-api-host/geo/v2/city/lookup?location=116.41%2C39.92'
+
+
+返回数据
+{
+  "code": "200",
+  "location": [
+    {
+      "name": "东城",
+      "id": "101011600",
+      "lat": "39.91755",
+      "lon": "116.41876",
+      "adm2": "北京",
+      "adm1": "北京市",
+      "country": "中国",
+      "tz": "Asia/Shanghai",
+      "utcOffset": "+08:00",
+      "isDst": "0",
+      "type": "city",
+      "rank": "35",
+      "fxLink": "https://www.qweather.com/weather/dongcheng-101011600.html"
+    }
+  ],
+  "refer": {
+    "sources": [
+      "https://developer.qweather.com/attribution.html"
+    ],
+    "license": [
+      "QWeather Developers License"
+    ]
+  }
+}
+
+实时天气
+
+请求路径#
+GET /weather/v1/current/{latitude}/{longitude}
+参数#
+路径参数
+latitude 必选
+number
+所需位置的纬度。十进制，最多支持小数点后两位。例如 39.92
+longitude 必选
+number
+所需位置的经度。十进制，最多支持小数点后两位。例如 116.41
+查询参数
+localTime
+boolean
+是否返回查询地点的本地时间
+
+可选值： false UTC时间（默认），true 本地时间
+
+lang
+string
+多语言设置
+
+
+curl -X GET --compressed \
+-H 'Authorization: Bearer your_token' \
+'https://your-api-host/weather/v1/current/39.92/116.41'
+返回数据
+
+{
+  "metadata": {
+    "tag": "03ec2ded05fa80a43df2664dd9e4a8f48f7cc4f97c6a81dfd736ae17098aba14",
+    "attributions": [
+      "https://developer.qweather.com/attribution.html"
+    ]
+  },
+  "condition": {
+    "text": "少云",
+    "code": "102"
+  },
+  "temperature": {
+    "value": 31.71,
+    "unit": "°C"
+  },
+  "feelsLike": {
+    "value": 33.64,
+    "unit": "°C"
+  },
+  "humidity": 0.69,
+  "wind": {
+    "direction": {
+      "degree": 226,
+      "compass": "sw"
+    },
+    "speed": {
+      "value": 4.74,
+      "unit": "m/s"
+    },
+    "scale": 3
+  },
+  "windGust": {
+    "value": 7.07,
+    "unit": "m/s"
+  },
+  "precipitation": {
+    "amount": {
+      "value": 0,
+      "unit": "mm"
+    },
+    "intensity": {
+      "value": 0,
+      "unit": "mm/h"
+    },
+    "type": "none"
+  },
+  "pressure": {
+    "value": 1001.5,
+    "unit": "hPa"
+  },
+  "visibility": {
+    "value": 29020,
+    "unit": "m"
+  },
+  "dewPoint": {
+    "value": 25.36,
+    "unit": "°C"
+  },
+  "cloudCover": 0.05,
+  "uvIndex": 3
+}
+
+每日天气预报
+请求路径#
+GET /weather/v1/daily/{latitude}/{longitude}
+
+参数#
+路径参数
+latitude 必选
+number
+所需位置的纬度。十进制，最多支持小数点后两位。例如 39.92
+longitude 必选
+number
+所需位置的经度。十进制，最多支持小数点后两位。例如 116.41
+查询参数
+days
+integer
+预报天数，支持 1-10 天，默认返回 7 天
+localTime
+boolean
+是否返回查询地点的本地时间
+
+可选值： false UTC时间（默认），true 本地时间
+
+lang
+string
+多语言设置
+
+curl -X GET --compressed \
+-H 'Authorization: Bearer your_token' \
+'https://your-api-host/weather/v1/daily/39.92/116.41'
+
+返回数据
+
+{
+  "metadata": {
+    "tag": "dabb37d79f0ba4498d5b92c873d33c862921eb1cb688181b84b3948306ea66bc",
+    "attributions": [
+      "https://developer.qweather.com/attribution.html"
+    ]
+  },
+  "days": [
+    {
+      "forecastStartTime": "2024-08-10T22:00Z",
+      "forecastEndTime": "2024-08-11T22:00Z",
+      "astro": {
+        "sunrise": "2024-08-11T04:22Z",
+        "sunset": "2024-08-11T19:34Z",
+        "astronomicalDawn": "2024-08-11T01:52Z",
+        "nauticalDawn": "2024-08-11T02:54Z",
+        "civilDawn": "2024-08-11T03:44Z",
+        "astronomicalDusk": "2024-08-11T22:04Z",
+        "nauticalDusk": "2024-08-11T21:01Z",
+        "civilDusk": "2024-08-11T20:12Z",
+        "solarNoon": "2024-08-11T11:58Z",
+        "solarMidnight": "2024-08-10T23:58Z",
+        "moonrise": "2024-08-11T20:00Z",
+        "moonset": "2024-08-11T04:57Z",
+        "moonTransit": "2024-08-11T00:19Z",
+        "moonUnderfoot": "2024-08-11T12:19Z",
+        "moonPhase": "waning-gibbous"
+      },
+      "temperatureMax": {
+        "value": 29.94,
+        "unit": "°C"
+      },
+      "temperatureMin": {
+        "value": 20.93,
+        "unit": "°C"
+      },
+      "temperatureAvg": {
+        "value": 25.57,
+        "unit": "°C"
+      },
+      "uvIndexMax": 6,
+      "daytime": {
+        "forecastStartTime": "2024-08-11T05:00Z",
+        "forecastEndTime": "2024-08-11T17:00Z",
+        "condition": {
+          "text": "小雨",
+          "code": "305"
+        },
+        "temperatureMax": {
+          "value": 29.94,
+          "unit": "°C"
+        },
+        "temperatureMin": {
+          "value": 20.93,
+          "unit": "°C"
+        },
+        "wind": {
+          "direction": {
+            "degree": 270,
+            "compass": "w"
+          },
+          "speed": {
+            "value": 1.87,
+            "unit": "m/s"
+          },
+          "scale": 2
+        },
+        "windGustMax": {
+          "value": 6.64,
+          "unit": "m/s"
+        },
+        "precipitation": {
+          "amount": {
+            "value": 0.75,
+            "unit": "mm"
+          },
+          "probability": 0.64,
+          "type": "rain"
+        },
+        "cloudCover": 0.32,
+        "humidity": 0.52
+      },
+      "nighttime": {
+        "forecastStartTime": "2024-08-11T17:00Z",
+        "forecastEndTime": "2024-08-12T05:00Z",
+        "condition": {
+          "text": "晴间多云",
+          "code": "103"
+        },
+        "temperatureMax": {
+          "value": 29.8,
+          "unit": "°C"
+        },
+        "temperatureMin": {
+          "value": 19.95,
+          "unit": "°C"
+        },
+        "wind": {
+          "direction": {
+            "degree": 343,
+            "compass": "nnw"
+          },
+          "speed": {
+            "value": 2.33,
+            "unit": "m/s"
+          },
+          "scale": 2
+        },
+        "windGustMax": {
+          "value": 7.16,
+          "unit": "m/s"
+        },
+        "precipitation": {
+          "amount": {
+            "value": 0,
+            "unit": "mm"
+          },
+          "probability": 0,
+          "type": "none"
+        },
+        "cloudCover": 0.34,
+        "humidity": 0.56
+      }
+    },
+    {
+      "forecastStartTime": "2024-08-11T22:00Z",
+      "forecastEndTime": "2024-08-12T22:00Z",
+      "astro": {
+        "sunrise": "2024-08-12T04:23Z",
+        "sunset": "2024-08-12T19:32Z",
+        "astronomicalDawn": "2024-08-12T01:54Z",
+        "nauticalDawn": "2024-08-12T02:56Z",
+        "civilDawn": "2024-08-12T03:45Z",
+        "astronomicalDusk": "2024-08-12T22:01Z",
+        "nauticalDusk": "2024-08-12T20:59Z",
+        "civilDusk": "2024-08-12T20:10Z",
+        "solarNoon": "2024-08-12T11:58Z",
+        "solarMidnight": "2024-08-11T23:58Z",
+        "moonrise": "2024-08-12T20:17Z",
+        "moonset": "2024-08-12T06:10Z",
+        "moonTransit": "2024-08-12T01:05Z",
+        "moonUnderfoot": "2024-08-12T13:05Z",
+        "moonPhase": "waning-gibbous"
+      },
+      "temperatureMax": {
+        "value": 29.24,
+        "unit": "°C"
+      },
+      "temperatureMin": {
+        "value": 19.72,
+        "unit": "°C"
+      },
+      "temperatureAvg": {
+        "value": 23.99,
+        "unit": "°C"
+      },
+      "uvIndexMax": 6,
+      "daytime": {
+        "forecastStartTime": "2024-08-12T05:00Z",
+        "forecastEndTime": "2024-08-12T17:00Z",
+        "condition": {
+          "text": "多云",
+          "code": "101"
+        },
+        "temperatureMax": {
+          "value": 29.24,
+          "unit": "°C"
+        },
+        "temperatureMin": {
+          "value": 19.72,
+          "unit": "°C"
+        },
+        "wind": {
+          "direction": {
+            "degree": 338,
+            "compass": "nnw"
+          },
+          "speed": {
+            "value": 1.6,
+            "unit": "m/s"
+          },
+          "scale": 2
+        },
+        "windGustMax": {
+          "value": 7.03,
+          "unit": "m/s"
+        },
+        "precipitation": {
+          "amount": {
+            "value": 0,
+            "unit": "mm"
+          },
+          "probability": 0,
+          "type": "none"
+        },
+        "cloudCover": 0.51,
+        "humidity": 0.55
+      },
+      "nighttime": {
+        "forecastStartTime": "2024-08-12T17:00Z",
+        "forecastEndTime": "2024-08-13T05:00Z",
+        "condition": {
+          "text": "晴间多云",
+          "code": "103"
+        },
+        "temperatureMax": {
+          "value": 28.68,
+          "unit": "°C"
+        },
+        "temperatureMin": {
+          "value": 18.5,
+          "unit": "°C"
+        },
+        "wind": {
+          "direction": {
+            "degree": 336,
+            "compass": "nnw"
+          },
+          "speed": {
+            "value": 2.97,
+            "unit": "m/s"
+          },
+          "scale": 2
+        },
+        "windGustMax": {
+          "value": 10.21,
+          "unit": "m/s"
+        },
+        "precipitation": {
+          "amount": {
+            "value": 0,
+            "unit": "mm"
+          },
+          "probability": 0,
+          "type": "none"
+        },
+        "cloudCover": 0.41,
+        "humidity": 0.57
+      }
+    }
+  ]
+}
+
+
+
+
+默认使用下面的经纬度
+121.55,31.23

@@ -64,6 +64,10 @@ private:
     
     // 当前使用的位置ID（通过IP定位动态获取）
     String locationId;
+
+    // 经纬度（新API使用路径参数而非location ID）
+    String latitude;
+    String longitude;
     
     // 当前天气数据
     String city;

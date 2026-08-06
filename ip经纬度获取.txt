@@ -1,0 +1,93 @@
+http://ip-api.com/json/?lang=zh-CN
+{"status":"success","country":"中国","countryCode":"CN","region":"SH","regionName":"上海市","city":"上海","zip":"200000","lat":31.2448,"lon":121.44,"timezone":"Asia/Shanghai","isp":"China Telecom (Group)","org":"Shanghai Highway Information Technology Co., Ltd","as":"AS4812 China Telecom (Group)","query":"118.242.26.166"}
+iciba-translate
+
+https://ipapi.co/json
+{
+    "ip": "118.242.26.166",
+    "network": "118.242.0.0/16",
+    "version": "IPv4",
+    "city": "Shanghai",
+    "region": "Shanghai",
+    "region_code": "SH",
+    "country": "CN",
+    "country_name": "China",
+    "country_code": "CN",
+    "country_code_iso3": "CHN",
+    "country_capital": "Beijing",
+    "country_tld": ".cn",
+    "continent_code": "AS",
+    "in_eu": false,
+    "postal": null,
+    "latitude": 31.224332,
+    "longitude": 121.468951,
+    "timezone": "Asia/Shanghai",
+    "utc_offset": "+0800",
+    "country_calling_code": "+86",
+    "currency": "CNY",
+    "currency_name": "Yuan Renminbi",
+    "languages": "zh-CN,yue,wuu,dta,ug,za",
+    "country_area": 9596960.0,
+    "country_population": 1411778724,
+    "asn": "AS4812",
+    "org": "China Telecom (Group)"
+}
+
+https://ipwho.is/
+
+{
+    "ip": "118.242.26.166",
+    "success": true,
+    "type": "IPv4",
+    "continent": "Asia",
+    "continent_code": "AS",
+    "country": "China",
+    "country_code": "CN",
+    "region": "Shanghai",
+    "region_code": "SH",
+    "city": "Shanghai",
+    "latitude": 31.2243332,
+    "longitude": 121.4689505,
+    "is_eu": false,
+    "postal": "200021",
+    "calling_code": "86",
+    "capital": "Beijing",
+    "borders": "AF,BT,HK,IN,KG,KP,KZ,LA,MM,MN,MO,NP,PK,RU,TJ,VN",
+    "flag": {
+        "img": "https://cdn.ipwhois.io/flags/cn.svg",
+        "emoji": "🇨🇳",
+        "emoji_unicode": "U+1F1E8 U+1F1F3"
+    },
+    "connection": {
+        "asn": 4812,
+        "org": "Shanghai Highway Information Technology Co.,Ltd",
+        "isp": "China Telecom Group",
+        "domain": "highway.com.cn"
+    },
+    "timezone": {
+        "id": "Asia/Shanghai",
+        "abbr": "CST",
+        "is_dst": false,
+        "offset": 28800,
+        "utc": "+08:00"
+    },
+    "readme": "https://ipwhois.io/docs"
+}
+
+https://free.freeipapi.com/api/json
+{"ipVersion":4,"ipAddress":"118.242.26.166","latitude":31.2448,"longitude":121.44,"countryName":"China","countryCode":"CN","capital":"Beijing","phoneCodes":[86],"timeZones":["Asia\/Shanghai","Asia\/Urumqi"],"zipCode":"200020","cityName":"Shanghai (Putuo Qu)","regionName":"Shanghai","regionCode":null,"continent":"Asia","continentCode":"AS","currencies":["CNY"],"languages":["zh"],"asn":"4812","asnOrganization":"China Telecom (Group)","isProxy":false}
+
+https://ipinfo.io/json
+{
+  "ip": "118.242.26.166",
+  "city": "Shanghai",
+  "region": "Shanghai",
+  "country": "CN",
+  "loc": "31.2222,121.4581",
+  "org": "AS4812 China Telecom (Group)",
+  "postal": "200000",
+  "timezone": "Asia/Shanghai",
+  "readme": "https://ipinfo.io/missingauth"
+}
+
+
