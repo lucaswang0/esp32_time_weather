@@ -1,5 +1,8 @@
 #include "AHT20BMP280Sensor.h"
+#include <esp_log.h>
 #include <Wire.h>
+
+static const char* TAG = "AHT20+BMP280";
 
 #define AHT20_ADDR 0x38
 #define BMP280_ADDR 0x77  // 确认你的传感器地址，常见是0x76或0x77
@@ -46,7 +49,7 @@ bool AHT20BMP280Sensor::begin() {
                 uint8_t status = Wire.read();
                 if ((status & 0x18) == 0x18) {
                     _aht20Connected = true;
-                    Serial.printf("[AHT20+BMP280] AHT20 初始化成功 | SDA: GPIO%d | SCL: GPIO%d\n", _sdaPin, _sclPin);
+                    ESP_LOGI(TAG, "AHT20 初始化成功 | SDA: GPIO%d | SCL: GPIO%d", _sdaPin, _sclPin);
                 }
             }
         }
@@ -61,12 +64,12 @@ bool AHT20BMP280Sensor::begin() {
             writeBMP280Register(BMP280_REG_CTRL_MEAS, 0b00110111);  // 温度 x2, 压力 x16, 正常模式
             writeBMP280Register(BMP280_REG_CONFIG, 0b00000000);
             _bmp280Connected = true;
-            Serial.printf("[AHT20+BMP280] BMP280 初始化成功 | ID: 0x%02X | 地址: 0x%02X\n", bmp280Id, BMP280_ADDR);
+            ESP_LOGI(TAG, "BMP280 初始化成功 | ID: 0x%02X | 地址: 0x%02X", bmp280Id, BMP280_ADDR);
         } else {
-            Serial.printf("[AHT20+BMP280] BMP280 校准数据读取失败\n");
+            ESP_LOGW(TAG, "BMP280 校准数据读取失败");
         }
     } else {
-        Serial.printf("[AHT20+BMP280] BMP280 未检测到 | 读取ID: 0x%02X\n", bmp280Id);
+        ESP_LOGW(TAG, "BMP280 未检测到 | 读取ID: 0x%02X", bmp280Id);
     }
 
     return _aht20Connected || _bmp280Connected;
@@ -93,7 +96,7 @@ bool AHT20BMP280Sensor::readCalibrationData() {
     _calib.dig_P8 = Wire.read() | (Wire.read() << 8);
     _calib.dig_P9 = Wire.read() | (Wire.read() << 8);
 
-    Serial.printf("[AHT20+BMP280] BMP280 校准数据读取成功 | T1:%u T2:%d T3:%d\n",
+    ESP_LOGI(TAG, "BMP280 校准数据读取成功 | T1:%u T2:%d T3:%d",
                   _calib.dig_T1, _calib.dig_T2, _calib.dig_T3);
     return true;
 }
@@ -216,7 +219,7 @@ bool AHT20BMP280Sensor::readAHT20() {
         _humidity = ((float)rawHumidity / 1048576.0) * 100.0;
         _temperature = ((float)rawTemperature / 1048576.0) * 200.0 - 50.0;
 
-        Serial.printf("[AHT20+BMP280] AHT20 读取成功 | 温度: %.2f°C | 湿度: %.2f%%\n", _temperature, _humidity);
+        ESP_LOGI(TAG, "AHT20 读取成功 | 温度: %.2f°C | 湿度: %.2f%%", _temperature, _humidity);
         return true;
     }
 
@@ -256,7 +259,7 @@ bool AHT20BMP280Sensor::readBMP280() {
     _bmpTemperature = temp;  // BMP280 内部温度，单独保存，避免覆盖 AHT20 的真实环境温度
     _pressure = press;
 
-    Serial.printf("[AHT20+BMP280] BMP280 读取成功 | 温度: %.2f°C | 气压: %.1f hPa (原始温度: %d, 压力: %d)\n",
+    ESP_LOGI(TAG, "BMP280 读取成功 | 温度: %.2f°C | 气压: %.1f hPa (原始温度: %d, 压力: %d)",
                   temp, press, rawTemp, rawPress);
     return true;
 }

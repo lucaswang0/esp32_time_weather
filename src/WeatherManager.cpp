@@ -1,4 +1,5 @@
 #include "WeatherManager.h"
+#include <esp_log.h>
 #include "DisplayManager.h"
 
 #include <mbedtls/base64.h>
@@ -7,7 +8,7 @@
 #include "ArduinoUZlib.h"
 #include <freertos/FreeRTOS.h>   // 【优化#2】vTaskDelay/pdMS_TO_TICKS
 
-
+static const char* TAG = "Weather";
 
 static bool sodiumInitialized = false;
 
@@ -37,9 +38,9 @@ WeatherManager::WeatherManager(WiFiManager& wifiManager) : wifiManager(wifiManag
     if (!sodiumInitialized) {
         if (sodium_init() == 0) {
             sodiumInitialized = true;
-            Serial.println("[Weather] libsodium初始化成功");
+            ESP_LOGI(TAG, "libsodium初始化成功");
         } else {
-            Serial.println("[Weather] libsodium初始化失败");
+            ESP_LOGE(TAG, "libsodium初始化失败");
         }
     }
 }
@@ -49,7 +50,7 @@ String WeatherManager::base64url_encode(const uint8_t* data, size_t len) {
     size_t output_len;
     size_t needed = len * 2 + 10;
     if (needed > sizeof(base64_buf)) {
-        Serial.printf("[Weather] base64url_encode: buffer too small (%u > %u), len=%u\n",
+        ESP_LOGE(TAG, "base64url_encode: buffer too small (%u > %u), len=%u",
                       needed, sizeof(base64_buf), (unsigned)len);
         return "";
     }
@@ -101,7 +102,7 @@ bool WeatherManager::gzipDecompress(uint8_t* compressed, size_t compressedLen, c
         return true;
     }
     
-    Serial.printf("[Weather] gzip解压失败: %d\n", result);
+    ESP_LOGE(TAG, "gzip解压失败: %d", result);
     if (out_buf != NULL) {
         free(out_buf);
     }
@@ -113,7 +114,7 @@ bool WeatherManager::ed25519_sign(const uint8_t* private_key,
                                   size_t message_len, 
                                   uint8_t* signature) {
     if (!sodiumInitialized) {
-        Serial.println("[Weather] libsodium未初始化");
+        ESP_LOGI(TAG, "libsodium未初始化");
         return false;
     }
     
@@ -133,7 +134,7 @@ String WeatherManager::generateJWT() {
     int ret = mbedtls_base64_decode(pkcs8, sizeof(pkcs8), &pkcs8_len, 
                                    (const unsigned char*)PRIVATE_KEY, strlen(PRIVATE_KEY));
     if (ret != 0) {
-        Serial.println("[Weather] Base64解码失败");
+        ESP_LOGE(TAG, "Base64解码失败");
         return "";
     }
     
@@ -160,24 +161,24 @@ String WeatherManager::generateJWT() {
 
 bool WeatherManager::fetchCurrentWeather() {
     if (!wifiManager.isConnected()) {
-        Serial.println("[Weather] WiFi未连接");
+        ESP_LOGI(TAG, "WiFi未连接");
         return false;
     }
 
     // 释放背景 RAM 缓存（已废弃：背景图已改为 PROGMEM 数组，0 RAM 占用）
-    Serial.printf("[Weather] HTTPS请求前堆内存: %u\n", ESP.getFreeHeap());
+    ESP_LOGI(TAG, "HTTPS请求前堆内存: %u", ESP.getFreeHeap());
     
     String token = generateJWT();
     if (token == "") {
-        Serial.println("[Weather] JWT生成失败");
+        ESP_LOGE(TAG, "JWT生成失败");
         return false;
     }
-    Serial.println("[Weather] JWT生成成功");
+    ESP_LOGI(TAG, "JWT生成成功");
     
     String url = String(QWEATHER_HOST) + "/weather/v1/current/" + latitude + "/" + longitude;
 
-    Serial.println("\n========== 获取当前天气 ==========");
-    Serial.println("[Weather] 请求URL: " + url);
+    ESP_LOGI(TAG, "\n========== 获取当前天气 ==========");
+    ESP_LOGI(TAG, "[Weather] 请求URL: %s", url.c_str());
 
     // 【优化#8】重试 3 → 2: 避免 "反复重试" 循环
     // 原来 3 次重试 + 5s + 30s = 1+ 分钟一次失败循环
@@ -195,7 +196,7 @@ bool WeatherManager::fetchCurrentWeather() {
         // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
         size_t maxAlloc = ESP.getMaxAllocHeap();
         if (maxAlloc < 24 * 1024) {
-            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求\n",
+            ESP_LOGW(TAG, "堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求",
                           maxAlloc, ESP.getFreeHeap());
             return false;
         }
@@ -213,37 +214,36 @@ bool WeatherManager::fetchCurrentWeather() {
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
 
-        Serial.printf("[Weather] 发送HTTP请求 (第%d/%d次)...\n", retry + 1, maxRetries);
+        ESP_LOGI(TAG, "发送HTTP请求 (第%d/%d次)...", retry + 1, maxRetries);
         int httpCode = https.GET();
 
         if (httpCode == HTTP_CODE_OK) {
             int len = https.getSize();
-            Serial.println("[Weather] HTTP请求成功，数据大小: " + String(len) + " 字节");
+            ESP_LOGI(TAG, "HTTP请求成功，数据大小: %d 字节", len);
 
             if (len > 0 && len < 4096) {
                 int bytesRead = https.getStream().readBytes(compressedData, len);
-                Serial.println("[Weather] 实际读取字节数: " + String(bytesRead));
+                ESP_LOGI(TAG, "[Weather] 实际读取字节数: %d", bytesRead);
                 
                 memset(decompressed, 0, sizeof(decompressed));
                 size_t decompressedLen = sizeof(decompressed) - 1;
                 
                 bool isGzip = (bytesRead >= 2 && compressedData[0] == 0x1F && compressedData[1] == 0x8B);
-                Serial.println("[Weather] 是否gzip压缩: " + String(isGzip ? "是" : "否"));
+                ESP_LOGI(TAG, "[Weather] 是否gzip压缩: %s", isGzip ? "是" : "否");
                 
                 if (isGzip) {
                     if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
-                        Serial.println("[Weather] 解压后数据大小: " + String(decompressedLen) + " 字节");
+                        ESP_LOGI(TAG, "解压后数据大小: %d 字节", decompressedLen);
                         
-                        Serial.println("[Weather] 完整JSON响应:");
-                        Serial.println(decompressed);
-                        Serial.println();
+                        ESP_LOGI(TAG, "完整JSON响应:");
+                        ESP_LOGI(TAG, "decompressed");
+                        ESP_LOGI(TAG, "");
                         
                         doc.clear();
                         DeserializationError error = deserializeJson(doc, decompressed);
                         
                         if (error) {
-                            Serial.print("[Weather] JSON解析失败: ");
-                            Serial.println(error.c_str());
+                                                        ESP_LOGI(TAG, "error.c_str()");
                             https.end();
                             return false;
                         }
@@ -251,9 +251,9 @@ bool WeatherManager::fetchCurrentWeather() {
                         // 新API无code字段，检查condition是否存在
                         JsonObject condition = doc["condition"];
                         if (condition.isNull()) {
-                            Serial.println("[Weather] API返回异常: 缺少condition字段");
-                            Serial.println("[Weather] JSON响应内容:");
-                            Serial.println(decompressed);
+                            ESP_LOGW(TAG, "API返回异常: 缺少condition字段");
+                            ESP_LOGI(TAG, "JSON响应内容:");
+                            ESP_LOGI(TAG, "decompressed");
                             https.end();
                             return false;
                         }
@@ -269,60 +269,63 @@ bool WeatherManager::fetchCurrentWeather() {
                         strftime(updateTime, sizeof(updateTime), "%Y-%m-%d %H:%M:%S", &timeinfo);
                         lastUpdateTime = String(updateTime);
                         
-                        Serial.printf("[Weather] 温度: %s\n", temperature.c_str());
-                        Serial.printf("[Weather] 天气: %s\n", weatherText.c_str());
-                        Serial.printf("[Weather] 天气代码: %s\n", weatherCode.c_str());
+                        ESP_LOGI(TAG, "温度: %s", temperature.c_str());
+                        ESP_LOGI(TAG, "天气: %s", weatherText.c_str());
+                        ESP_LOGI(TAG, "天气代码: %s", weatherCode.c_str());
                         
                         https.end();
                         return true;
                     } else {
-                        Serial.println("[Weather] gzip解压失败");
-                        Serial.println("[Weather] 原始数据前20字节:");
-                        for (int i = 0; i < min(bytesRead, 20); i++) {
-                            Serial.printf("%02X ", compressedData[i]);
+                        ESP_LOGE(TAG, "gzip解压失败");
+                        {
+                            String hexDump = "";
+                            for (int i = 0; i < min(bytesRead, 20); i++) {
+                                char buf[4];
+                                snprintf(buf, sizeof(buf), "%02X ", compressedData[i]);
+                                hexDump += buf;
+                            }
+                            ESP_LOGE(TAG, "原始数据前20字节: %s", hexDump.c_str());
                         }
-                        Serial.println();
                     }
                 } else {
-                    Serial.println("[Weather] 非gzip格式，直接解析");
-                    Serial.println("[Weather] 完整JSON响应:");
-                    Serial.println((const char*)compressedData);
-                    Serial.println();
+                    ESP_LOGI(TAG, "非gzip格式，直接解析");
+                    ESP_LOGI(TAG, "完整JSON响应:");
+                    ESP_LOGI(TAG, "(const char*)compressedData");
+                    ESP_LOGI(TAG, "");
                     
                     doc.clear();
                     DeserializationError error = deserializeJson(doc, (const char*)compressedData);
                     
                     if (error) {
-                        Serial.print("[Weather] JSON解析失败: ");
-                        Serial.println(error.c_str());
+                                                ESP_LOGI(TAG, "error.c_str()");
                     } else {
                         JsonObject condition = doc["condition"];
                         if (!condition.isNull()) {
                             temperature = doc["temperature"]["value"].as<String>() + "°C";
                             weatherText = condition["text"].as<String>();
                             weatherCode = condition["code"].as<String>();
-                            Serial.printf("[Weather] 温度: %s\n", temperature.c_str());
+                            ESP_LOGI(TAG, "温度: %s", temperature.c_str());
                             https.end();
                             return true;
                         } else {
-                            Serial.println("[Weather] API返回异常: 缺少condition字段");
+                            ESP_LOGW(TAG, "API返回异常: 缺少condition字段");
                         }
                     }
                 }
             } else {
-                Serial.printf("[Weather] 数据长度无效: %d 字节\n", len);
+                ESP_LOGW(TAG, "数据长度无效: %d 字节", len);
             }
             https.end();
         } else {
-            Serial.printf("[Weather] 请求失败: %d\n", httpCode);
-            Serial.println("[Weather] HTTP状态码说明:");
-            if (httpCode == -1) Serial.println("         -1: 连接失败");
-            if (httpCode == -2) Serial.println("         -2: DNS解析失败");
-            if (httpCode == -3) Serial.println("         -3: 连接超时");
-            if (httpCode == -4) Serial.println("         -4: 传输错误");
-            if (httpCode == -5) Serial.println("         -5: 无效响应");
-            if (httpCode >= 400 && httpCode < 500) Serial.println("         4xx: 请求错误（可能是Token无效）");
-            if (httpCode >= 500) Serial.println("         5xx: 服务器错误");
+            ESP_LOGE(TAG, "请求失败: %d", httpCode);
+            ESP_LOGI(TAG, "HTTP状态码说明:");
+            ESP_LOGI(TAG, " -1: 连接失败");
+            ESP_LOGE(TAG, " -2: DNS解析失败");
+            ESP_LOGW(TAG, " -3: 连接超时");
+            ESP_LOGE(TAG, " -4: 传输错误");
+            ESP_LOGE(TAG, " -5: 无效响应");
+            ESP_LOGE(TAG, " 4xx: 请求错误（可能是Token无效）");
+            ESP_LOGE(TAG, " 5xx: 服务器错误");
             https.end();
         }
         
@@ -331,45 +334,45 @@ bool WeatherManager::fetchCurrentWeather() {
             // 【优化#2】失败后延时，给 FreeRTOS 回收堆碎片时间
             // 2s 太短，mbedTLS 内部 buffer 还没完全释放；5s 给足够时间回收
             vTaskDelay(pdMS_TO_TICKS(5000));
-            Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
+            ESP_LOGW(TAG, "第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...",
                           retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
             // 【优化#8】主动释放 mbedTLS 内部 buffer: 析构 + placement new 重建
             // mbedTLS 失败后内部 SSL context (32KB) 可能部分残留, 析构强制释放
             // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
             // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
-            Serial.println("[Weather] 主动释放 mbedTLS 内部 buffer...");
+            ESP_LOGI(TAG, "主动释放 mbedTLS 内部 buffer...");
             weatherClient.~WiFiClientSecure();
             new (&weatherClient) WiFiClientSecure();
-            Serial.printf("[Weather] mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B\n",
+            ESP_LOGI(TAG, "mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B",
                           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         }
     }
 
-    Serial.println("[Weather] 请求失败");
+    ESP_LOGE(TAG, "请求失败");
     restoreBgCacheIfNeeded();
     return false;
 }
 
 bool WeatherManager::fetch3DayForecast() {
     if (!wifiManager.isConnected()) {
-        Serial.println("[Weather] WiFi未连接");
+        ESP_LOGI(TAG, "WiFi未连接");
         return false;
     }
 
     // 释放背景 RAM 缓存（已废弃：背景图已改为 PROGMEM 数组）
-    Serial.printf("[Weather] HTTPS请求前堆内存: %u\n", ESP.getFreeHeap());
+    ESP_LOGI(TAG, "HTTPS请求前堆内存: %u", ESP.getFreeHeap());
     
     String token = generateJWT();
     if (token == "") {
-        Serial.println("[Weather] JWT生成失败");
+        ESP_LOGE(TAG, "JWT生成失败");
         return false;
     }
     
     String url = String(QWEATHER_HOST) + "/weather/v1/daily/" + latitude + "/" + longitude + "?days=3&localTime=true";
     
-    Serial.println("\n========== 获取3天天气预报 ==========");
-    Serial.println("[Weather] 请求URL: " + url);
+    ESP_LOGI(TAG, "\n========== 获取3天天气预报 ==========");
+    ESP_LOGI(TAG, "[Weather] 请求URL: %s", url.c_str());
     
     // 【优化#8】重试 3 → 2: 避免 "反复重试" 循环
     // 原来 3 次重试 + 5s + 30s = 1+ 分钟一次失败循环
@@ -387,7 +390,7 @@ bool WeatherManager::fetch3DayForecast() {
         // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
         size_t maxAlloc = ESP.getMaxAllocHeap();
         if (maxAlloc < 24 * 1024) {
-            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求\n",
+            ESP_LOGW(TAG, "堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求",
                           maxAlloc, ESP.getFreeHeap());
             return false;
         }
@@ -404,7 +407,7 @@ bool WeatherManager::fetch3DayForecast() {
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
 
-        Serial.printf("[Weather] 发送HTTP请求 (第%d/%d次)...\n", retry + 1, maxRetries);
+        ESP_LOGI(TAG, "发送HTTP请求 (第%d/%d次)...", retry + 1, maxRetries);
         int httpCode = https.GET();
 
         if (httpCode == HTTP_CODE_OK) {
@@ -420,16 +423,15 @@ bool WeatherManager::fetch3DayForecast() {
 
                 if (isGzip) {
                     if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
-                        Serial.println("[Weather] 完整JSON响应:");
-                        Serial.println(decompressed);
-                        Serial.println();
+                        ESP_LOGI(TAG, "完整JSON响应:");
+                        ESP_LOGI(TAG, "decompressed");
+                        ESP_LOGI(TAG, "");
 
                         doc.clear();
                         DeserializationError error = deserializeJson(doc, decompressed);
                         
                         if (error) {
-                            Serial.print("[Weather] JSON解析失败: ");
-                            Serial.println(error.c_str());
+                                                        ESP_LOGI(TAG, "error.c_str()");
                             https.end();
                             return false;
                         }
@@ -437,7 +439,7 @@ bool WeatherManager::fetch3DayForecast() {
                         // 新API无code字段，检查days数组是否存在
                         JsonArray dailyArray = doc["days"];
                         if (dailyArray.isNull()) {
-                            Serial.println("[Weather] API返回异常: 缺少days字段");
+                            ESP_LOGW(TAG, "API返回异常: 缺少days字段");
                             https.end();
                             return false;
                         }
@@ -463,7 +465,7 @@ bool WeatherManager::fetch3DayForecast() {
                             forecasts[i].sunset = ss.length() >= 16 ? ss.substring(11, 16) : ss;
                             forecasts[i].moonPhaseIcon = moonPhaseToIcon(day["astro"]["moonPhase"].as<String>());
 
-                            Serial.printf("[Weather] 第%d天: %s %s %s~%s°C 日出:%s 日落:%s 月相:%s\n",
+                            ESP_LOGI(TAG, "第%d天: %s %s %s~%s°C 日出:%s 日落:%s 月相:%s",
                                          i + 1,
                                          forecasts[i].date.c_str(),
                                          forecasts[i].textDay.c_str(),
@@ -477,19 +479,18 @@ bool WeatherManager::fetch3DayForecast() {
                         https.end();
                         return true;
                     } else {
-                        Serial.println("[Weather] gzip解压失败");
+                        ESP_LOGE(TAG, "gzip解压失败");
                     }
                 } else {
-                    Serial.println("[Weather] 完整JSON响应:");
-                    Serial.println((const char*)compressedData);
-                    Serial.println();
+                    ESP_LOGI(TAG, "完整JSON响应:");
+                    ESP_LOGI(TAG, "(const char*)compressedData");
+                    ESP_LOGI(TAG, "");
                     
                     doc.clear();
                     DeserializationError error = deserializeJson(doc, (const char*)compressedData);
                     
                     if (error) {
-                        Serial.print("[Weather] JSON解析失败: ");
-                        Serial.println(error.c_str());
+                                                ESP_LOGI(TAG, "error.c_str()");
                     } else {
                         JsonArray dailyArray = doc["days"];
                         if (!dailyArray.isNull()) {
@@ -518,7 +519,7 @@ bool WeatherManager::fetch3DayForecast() {
             }
             https.end();
         } else {
-            Serial.printf("[Weather] 请求失败: %d\n", httpCode);
+            ESP_LOGE(TAG, "请求失败: %d", httpCode);
             https.end();
         }
         
@@ -527,44 +528,44 @@ bool WeatherManager::fetch3DayForecast() {
             // 【优化#2】失败后延时，给 FreeRTOS 回收堆碎片时间
             // 2s 太短，mbedTLS 内部 buffer 还没完全释放；5s 给足够时间回收
             vTaskDelay(pdMS_TO_TICKS(5000));
-            Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
+            ESP_LOGW(TAG, "第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...",
                           retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
             // 【优化#8】主动释放 mbedTLS 内部 buffer: 析构 + placement new 重建
             // mbedTLS 失败后内部 SSL context (32KB) 可能部分残留, 析构强制释放
             // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
             // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
-            Serial.println("[Weather] 主动释放 mbedTLS 内部 buffer...");
+            ESP_LOGI(TAG, "主动释放 mbedTLS 内部 buffer...");
             weatherClient.~WiFiClientSecure();
             new (&weatherClient) WiFiClientSecure();
-            Serial.printf("[Weather] mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B\n",
+            ESP_LOGI(TAG, "mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B",
                           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         }
     }
 
-    Serial.println("[Weather] 请求失败");
+    ESP_LOGE(TAG, "请求失败");
     return false;
 }
 
 bool WeatherManager::fetchCityInfo() {
     if (!wifiManager.isConnected()) {
-        Serial.println("[Weather] WiFi未连接");
+        ESP_LOGI(TAG, "WiFi未连接");
         return false;
     }
 
     // 释放背景 RAM 缓存（已废弃：背景图已改为 PROGMEM 数组）
-    Serial.printf("[Weather] HTTPS请求前堆内存: %u\n", ESP.getFreeHeap());
+    ESP_LOGI(TAG, "HTTPS请求前堆内存: %u", ESP.getFreeHeap());
     
     String token = generateJWT();
     if (token == "") {
-        Serial.println("[Weather] JWT生成失败");
+        ESP_LOGE(TAG, "JWT生成失败");
         return false;
     }
     
     String url = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + longitude + "%2C" + latitude;
     
-    Serial.println("\n========== 获取城市信息 ==========");
-    Serial.println("[Weather] 请求URL: " + url);
+    ESP_LOGI(TAG, "\n========== 获取城市信息 ==========");
+    ESP_LOGI(TAG, "[Weather] 请求URL: %s", url.c_str());
     
     // 【优化#8】重试 3 → 2: 避免 "反复重试" 循环
     // 原来 3 次重试 + 5s + 30s = 1+ 分钟一次失败循环
@@ -583,7 +584,7 @@ bool WeatherManager::fetchCityInfo() {
         // ESP32-C3 400KB SRAM 启动时堆 130KB+ 但碎片化后 getMaxAllocHeap 远小于 getFreeHeap
         size_t maxAlloc = ESP.getMaxAllocHeap();
         if (maxAlloc < 24 * 1024) {
-            Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求\n",
+            ESP_LOGW(TAG, "堆最大连续块不足 24KB (当前: %u B / 剩余: %u B)，放弃本次请求",
                           maxAlloc, ESP.getFreeHeap());
             return false;
         }
@@ -600,12 +601,12 @@ bool WeatherManager::fetchCityInfo() {
         https.addHeader("Accept-Encoding", "gzip, deflate");
         https.addHeader("User-Agent", "ESP32-Weather");
 
-        Serial.printf("[Weather] 发送HTTP请求 (第%d/%d次)...\n", retry + 1, maxRetries);
+        ESP_LOGI(TAG, "发送HTTP请求 (第%d/%d次)...", retry + 1, maxRetries);
         int httpCode = https.GET();
 
         if (httpCode == HTTP_CODE_OK) {
             int len = https.getSize();
-            Serial.println("[Weather] HTTP请求成功，数据大小: " + String(len) + " 字节");
+            ESP_LOGI(TAG, "HTTP请求成功，数据大小: %d 字节", len);
 
             if (len > 0 && len < 4096) {
                 int bytesRead = https.getStream().readBytes(compressedData, len);
@@ -614,25 +615,24 @@ bool WeatherManager::fetchCityInfo() {
                 size_t decompressedLen = sizeof(decompressed) - 1;
 
                 bool isGzip = (bytesRead >= 2 && compressedData[0] == 0x1F && compressedData[1] == 0x8B);
-                Serial.println("[Weather] 是否gzip压缩: " + String(isGzip ? "是" : "否"));
+                ESP_LOGI(TAG, "[Weather] 是否gzip压缩: %s", isGzip ? "是" : "否");
 
                 if (isGzip) {
                     if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
-                        Serial.println("[Weather] 解压后数据大小: " + String(decompressedLen) + " 字节");
+                        ESP_LOGI(TAG, "解压后数据大小: %d 字节", decompressedLen);
 
                         doc.clear();
                         DeserializationError error = deserializeJson(doc, decompressed);
                         
                         if (error) {
-                            Serial.print("[Weather] JSON解析失败: ");
-                            Serial.println(error.c_str());
+                                                        ESP_LOGI(TAG, "error.c_str()");
                             https.end();
                             return false;
                         }
                         
                         const char* code = doc["code"];
                         if (code == NULL || strcmp(code, "200") != 0) {
-                            Serial.printf("[Weather] API返回错误码: %s\n", code ? code : "NULL");
+                            ESP_LOGW(TAG, "API返回错误码: %s", code ? code : "NULL");
                             https.end();
                             return false;
                         }
@@ -650,22 +650,21 @@ bool WeatherManager::fetchCityInfo() {
                             
                             city = cityInfo.name;
                             
-                            Serial.printf("[Weather] 获取城市成功: %s\n", cityInfo.name.c_str());
+                            ESP_LOGI(TAG, "获取城市成功: %s", cityInfo.name.c_str());
                         }
                         
                         https.end();
                         return true;
                     } else {
-                        Serial.println("[Weather] gzip解压失败");
+                        ESP_LOGE(TAG, "gzip解压失败");
                     }
                 } else {
-                    Serial.println("[Weather] 非gzip格式，直接解析");
+                    ESP_LOGI(TAG, "非gzip格式，直接解析");
                     doc.clear();
                     DeserializationError error = deserializeJson(doc, (const char*)compressedData);
                     
                     if (error) {
-                        Serial.print("[Weather] JSON解析失败: ");
-                        Serial.println(error.c_str());
+                                                ESP_LOGI(TAG, "error.c_str()");
                     } else {
                         const char* code = doc["code"];
                         if (code != NULL && strcmp(code, "200") == 0) {
@@ -673,7 +672,7 @@ bool WeatherManager::fetchCityInfo() {
                             if (locationArray.size() > 0) {
                                 JsonObject location = locationArray[0];
                                 city = location["name"].as<String>();
-                                Serial.printf("[Weather] 获取城市成功: %s\n", city.c_str());
+                                ESP_LOGI(TAG, "获取城市成功: %s", city.c_str());
                                 https.end();
                                 return true;
                             }
@@ -683,7 +682,7 @@ bool WeatherManager::fetchCityInfo() {
             }
             https.end();
         } else {
-            Serial.printf("[Weather] 请求失败: %d\n", httpCode);
+            ESP_LOGE(TAG, "请求失败: %d", httpCode);
             https.end();
         }
         
@@ -692,33 +691,33 @@ bool WeatherManager::fetchCityInfo() {
             // 【优化#2】失败后延时，给 FreeRTOS 回收堆碎片时间
             // 2s 太短，mbedTLS 内部 buffer 还没完全释放；5s 给足够时间回收
             vTaskDelay(pdMS_TO_TICKS(5000));
-            Serial.printf("[Weather] 第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...\n",
+            ESP_LOGW(TAG, "第%d次失败，5秒后重试 (堆剩余: %u B, 最大块: %u B)...",
                           retry + 1, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
             // 【优化#8】主动释放 mbedTLS 内部 buffer: 析构 + placement new 重建
             // mbedTLS 失败后内部 SSL context (32KB) 可能部分残留, 析构强制释放
             // 不能直接调 WiFi.disconnect(true): 会触发 WiFiManager::maintainConnection()
             // 检测到断开后 autoConnect() 失败, 启动 AP 配网模式, 造成循环
-            Serial.println("[Weather] 主动释放 mbedTLS 内部 buffer...");
+            ESP_LOGI(TAG, "主动释放 mbedTLS 内部 buffer...");
             weatherClient.~WiFiClientSecure();
             new (&weatherClient) WiFiClientSecure();
-            Serial.printf("[Weather] mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B\n",
+            ESP_LOGI(TAG, "mbedTLS 释放后堆状态: 剩余 %u B, 最大块 %u B",
                           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
         }
     }
 
-    Serial.println("[Weather] 请求失败");
+    ESP_LOGE(TAG, "请求失败");
     restoreBgCacheIfNeeded();
     return false;
 }
 
 bool WeatherManager::fetchLocationByIP() {
     if (!wifiManager.isConnected()) {
-        Serial.println("[Weather] WiFi未连接");
+        ESP_LOGI(TAG, "WiFi未连接");
         return false;
     }
 
-    Serial.println("\n========== 通过IP获取定位 ==========");
+    ESP_LOGI(TAG, "\n========== 通过IP获取定位 ==========");
 
     // IP 定位服务列表，按优先级排序，前一个失败自动切换下一个
     // format: 0=ip-api.com, 1=ipapi.co/ipwho.is, 2=freeipapi.com, 3=ipinfo.io
@@ -740,7 +739,7 @@ bool WeatherManager::fetchLocationByIP() {
     bool ipOk = false;
 
     for (auto& svc : services) {
-        Serial.printf("[Weather] 请求 %s: %s\n", svc.name, svc.url);
+        ESP_LOGI(TAG, "请求 %s: %s", svc.name, svc.url);
 
         WiFiClient tcpClient;
         WiFiClientSecure tlsClient;
@@ -757,20 +756,20 @@ bool WeatherManager::fetchLocationByIP() {
         int httpCode = http.GET();
 
         if (httpCode != HTTP_CODE_OK) {
-            Serial.printf("[Weather] %s 请求失败: %d\n", svc.name, httpCode);
+            ESP_LOGE(TAG, "%s 请求失败: %d", svc.name, httpCode);
             http.end();
             continue;
         }
 
         String payload = http.getString();
-        Serial.printf("[Weather] %s 响应: %s\n", svc.name, payload.c_str());
+        ESP_LOGI(TAG, "%s 响应: %s", svc.name, payload.c_str());
 
         doc.clear();
         DeserializationError error = deserializeJson(doc, payload);
         http.end();
 
         if (error) {
-            Serial.printf("[Weather] %s JSON解析失败: %s\n", svc.name, error.c_str());
+            ESP_LOGE(TAG, "%s JSON解析失败: %s", svc.name, error.c_str());
             continue;
         }
 
@@ -778,7 +777,7 @@ bool WeatherManager::fetchLocationByIP() {
             // ip-api.com: {"status":"success", "city":"上海", "regionName":"上海市", "lat":31.24, "lon":121.44}
             const char* status = doc["status"];
             if (status == NULL || strcmp(status, "success") != 0) {
-                Serial.printf("[Weather] ip-api.com 状态异常: %s\n", status ? status : "NULL");
+                ESP_LOGW(TAG, "ip-api.com 状态异常: %s", status ? status : "NULL");
                 continue;
             }
             cityName = doc["city"].as<String>();
@@ -789,7 +788,7 @@ bool WeatherManager::fetchLocationByIP() {
             // ipapi.co / ipwho.is: {"city":"Shanghai", "latitude":31.22, "longitude":121.45}
             // ipwho.is 额外有 success 字段
             if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
-                Serial.printf("[Weather] %s success=false\n", svc.name);
+                ESP_LOGW(TAG, "%s success=false", svc.name);
                 continue;
             }
             lat = doc["latitude"].as<String>();
@@ -815,18 +814,18 @@ bool WeatherManager::fetchLocationByIP() {
         }
 
         if (lat.length() > 0 && lon.length() > 0) {
-            Serial.printf("[Weather] IP定位成功 (%s): %s %s (%.4f, %.4f)\n",
+            ESP_LOGI(TAG, "IP定位成功 (%s): %s %s (%.4f, %.4f)",
                           svc.name, province.c_str(), cityName.c_str(),
                           lat.toFloat(), lon.toFloat());
             ipOk = true;
             break;
         } else {
-            Serial.printf("[Weather] %s 未获取到经纬度, 尝试下一个服务\n", svc.name);
+            ESP_LOGW(TAG, "%s 未获取到经纬度, 尝试下一个服务", svc.name);
         }
     }
 
     if (!ipOk) {
-        Serial.println("[Weather] 所有IP定位服务均失败，使用默认经纬度");
+        ESP_LOGE(TAG, "所有IP定位服务均失败，使用默认经纬度");
         latitude = DEFAULT_LAT;
         longitude = DEFAULT_LON;
         return false;
@@ -839,18 +838,18 @@ bool WeatherManager::fetchLocationByIP() {
     // JWT + QWeather 地理查询 (或降级到 IP 坐标)
     String token = generateJWT();
     if (token == "") {
-        Serial.println("[Weather] JWT生成失败，使用IP定位数据作为降级方案");
+        ESP_LOGE(TAG, "JWT生成失败，使用IP定位数据作为降级方案");
         city = cityName;
         return true;
     }
 
     // QWeather 地理查询：location 接受 "lon,lat"
     String geoUrl = String(QWEATHER_HOST) + "/geo/v2/city/lookup?location=" + lon + "%2C" + lat;
-    Serial.println("[Weather] 和风天气地理查询: " + geoUrl);
+    ESP_LOGI(TAG, "[Weather] 和风天气地理查询: %s", geoUrl.c_str());
 
     size_t maxAlloc = ESP.getMaxAllocHeap();
     if (maxAlloc < 24 * 1024) {
-        Serial.printf("[Weather] 堆最大连续块不足 24KB (当前: %u B), 放弃地理查询\n", maxAlloc);
+        ESP_LOGW(TAG, "堆最大连续块不足 24KB (当前: %u B), 放弃地理查询", maxAlloc);
         city = cityName;
         return true;
     }
@@ -881,13 +880,13 @@ bool WeatherManager::fetchLocationByIP() {
 
             if (isGzip) {
                 if (gzipDecompress(compressedData, bytesRead, decompressed, &decompressedLen)) {
-                    Serial.printf("[Weather] 地理查询解压后: %u 字节\n", (unsigned)decompressedLen);
+                    ESP_LOGI(TAG, "地理查询解压后: %u 字节", (unsigned)decompressedLen);
 
                     doc.clear();
                     DeserializationError geoError = deserializeJson(doc, decompressed);
 
                     if (geoError) {
-                        Serial.printf("[Weather] 地理查询JSON解析失败: %s\n", geoError.c_str());
+                        ESP_LOGE(TAG, "地理查询JSON解析失败: %s", geoError.c_str());
                         https.end();
                         city = cityName;
                         return true;
@@ -901,27 +900,27 @@ bool WeatherManager::fetchLocationByIP() {
                             locationId = location["id"].as<String>();
                             city = location["name"].as<String>();
 
-                            Serial.printf("[Weather] 地理查询成功: %s (城市: %s)\n",
+                            ESP_LOGI(TAG, "地理查询成功: %s (城市: %s)",
                                           locationId.c_str(), city.c_str());
 
                             https.end();
                             return true;
                         }
                     }
-                    Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
+                    ESP_LOGW(TAG, "地理查询返回错误码: %s", geoCodeStr ? geoCodeStr : "NULL");
                     https.end();
                 } else {
-                    Serial.println("[Weather] 地理查询gzip解压失败");
+                    ESP_LOGE(TAG, "地理查询gzip解压失败");
                     https.end();
                 }
             } else {
-                Serial.println("[Weather] 地理查询非gzip格式，直接解析");
+                ESP_LOGI(TAG, "地理查询非gzip格式，直接解析");
 
                 doc.clear();
                 DeserializationError geoError = deserializeJson(doc, (const char*)compressedData);
 
                 if (geoError) {
-                    Serial.printf("[Weather] 地理查询JSON解析失败: %s\n", geoError.c_str());
+                    ESP_LOGE(TAG, "地理查询JSON解析失败: %s", geoError.c_str());
                 } else {
                     const char* geoCodeStr = doc["code"];
                     if (geoCodeStr != NULL && strcmp(geoCodeStr, "200") == 0) {
@@ -931,29 +930,29 @@ bool WeatherManager::fetchLocationByIP() {
                             locationId = location["id"].as<String>();
                             city = location["name"].as<String>();
 
-                            Serial.printf("[Weather] 地理查询成功: %s (城市: %s)\n",
+                            ESP_LOGI(TAG, "地理查询成功: %s (城市: %s)",
                                           locationId.c_str(), city.c_str());
 
                             https.end();
                             return true;
                         }
                     }
-                    Serial.printf("[Weather] 地理查询返回错误码: %s\n", geoCodeStr ? geoCodeStr : "NULL");
+                    ESP_LOGW(TAG, "地理查询返回错误码: %s", geoCodeStr ? geoCodeStr : "NULL");
                 }
                 https.end();
             }
         } else {
-            Serial.printf("[Weather] 地理查询响应大小异常: %d\n", len);
+            ESP_LOGW(TAG, "地理查询响应大小异常: %d", len);
             https.end();
         }
     } else {
-        Serial.printf("[Weather] 地理查询失败: %d\n", geoCode);
+        ESP_LOGE(TAG, "地理查询失败: %d", geoCode);
         https.end();
     }
 
     // QWeather 地理查询失败，降级使用 IP 坐标
     city = cityName;
-    Serial.println("[Weather] 使用IP定位数据作为降级方案");
+    ESP_LOGW(TAG, "使用IP定位数据作为降级方案");
     return true;
 }
 

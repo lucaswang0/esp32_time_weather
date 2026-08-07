@@ -22,8 +22,10 @@
 #include "WiFiInfoPage.h"
 #include "APModePage.h"
 #include "StreamingPlayerPage.h"
-#include "FlipClockPage.h"
 #include <driver/gpio.h>
+#include <esp_log.h>
+
+static const char* TAG = "Main";
 
 // ==================== 全局对象 ====================
 
@@ -46,7 +48,6 @@ HistoryPage*         pHistoryPage         = nullptr;
 WiFiInfoPage*        pWiFiInfoPage        = nullptr;
 StreamingPlayerPage* pStreamingPlayerPage = nullptr;
 APModePage*          pAPModePage          = nullptr;
-FlipClockPage*       pFlipClockPage       = nullptr;
 PageManager          pageManager(displayManager);
 
 // ==================== TaskManager ====================
@@ -100,14 +101,14 @@ static int calculateAutoBrightness() {
     else if (h >= 18 && h < 22) target = 1;
     else                        target = 0;
 
-    Serial.printf("[Brightness] 当前小时:%d 等级:%d\n", h, target);
+    ESP_LOGI(TAG, "[Brightness] 当前小时:%d 等级:%d", h, target);
     return target;
 }
 
 static void handleTouchEvent(TouchType type) {
     switch (type) {
         case TOUCH_SHORT: {
-            Serial.println("[Touch] Short touch - next page");
+            ESP_LOGI(TAG, "[Touch] Short touch - next page");
             //播放触摸反馈音（短促清脆）
             buzzerController.touchFeedbackShort();
 
@@ -119,7 +120,7 @@ static void handleTouchEvent(TouchType type) {
             break;
         }
         case TOUCH_DOUBLE: {
-            Serial.println("[Touch] Double touch - prev page");
+            ESP_LOGI(TAG, "[Touch] Double touch - prev page");
             //播放触摸反馈音（双击嘀嘀）
             buzzerController.touchFeedbackDouble();
 
@@ -143,7 +144,7 @@ static void handleTouchEvent(TouchType type) {
         //     break;
         // }
         case TOUCH_VERY_LONG:
-            Serial.println("[Touch] Very long touch - Enter AP mode");
+            ESP_LOGI(TAG, "[Touch] Very long touch - Enter AP mode");
             //播放触摸反馈音（长促嘟——）
             buzzerController.touchFeedbackLong();
 
@@ -182,14 +183,14 @@ void setup() {
 
       // ========== 3. 挂载 LittleFS ==========
     if (!LittleFS.begin(true)) {
-        Serial.println("[LittleFS] Mount Failed - Formatting...");
+        ESP_LOGE(TAG, "[LittleFS] Mount Failed - Formatting...");
         if (!LittleFS.begin(true)) {
-            Serial.println("[LittleFS] Format Failed");
+            ESP_LOGE(TAG, "[LittleFS] Format Failed");
         } else {
-            Serial.println("[LittleFS] Format Success");
+            ESP_LOGI(TAG, "[LittleFS] Format Success");
         }
     } else {
-        Serial.println("[LittleFS] Mount Success");
+        ESP_LOGI(TAG, "[LittleFS] Mount Success");
     }
 
    // ========== 4. 背光PWM初始化 ==========
@@ -208,7 +209,7 @@ void setup() {
     ledcDetachPin(PIN_TFT_BL);
     ledcAttachPin(PIN_TFT_BL, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, BACKLIGHT_LEVELS[currentBacklightLevel]);
-    Serial.printf("[Backlight] 重新附加背光 PWM, 等级: %d\n", currentBacklightLevel);
+    ESP_LOGI(TAG, "[Backlight] 重新附加背光 PWM, 等级: %d", currentBacklightLevel);
 
  // ========== 7. 屏幕初始化后，重新附加蜂鸣器PWM ==========
     // TFT_eSPI.init() 可能重置了GPIO状态，所以重新附加
@@ -216,13 +217,13 @@ void setup() {
     ledcDetachPin(PIN_BUZZER);
     ledcAttachPin(PIN_BUZZER, LEDC_CHANNEL);
     ledcWrite(LEDC_CHANNEL, (1 << LEDC_TIMER_BIT) - 1);
-    Serial.println("[Main] 蜂鸣器 PWM 重新附加，静音状态（高电平）");
+    ESP_LOGI(TAG, "蜂鸣器 PWM 重新附加，静音状态（高电平）");
 
     // AHT20+BMP280
     if (!aht20Bmp280Sensor.begin()) {
-        Serial.println("[Main] AHT20+BMP280 传感器初始化失败");
+        ESP_LOGE(TAG, "AHT20+BMP280 传感器初始化失败");
     } else {
-        Serial.println("[Main] AHT20+BMP280 传感器初始化成功");
+        ESP_LOGI(TAG, "AHT20+BMP280 传感器初始化成功");
         delay(100);
         aht20Bmp280Sensor.update();
     }
@@ -236,27 +237,27 @@ void setup() {
 
     // 触摸
     touchSensor.begin();
-    Serial.println("[Main] TTP223 touch sensor initialized");
+    ESP_LOGI(TAG, "TTP223 touch sensor initialized");
 
     // 互斥锁
     displayMutex = xSemaphoreCreateMutex();
 
-    Serial.println("\n================================================");
-    Serial.println("   ESP32-C3 Weather Clock (Page-based)");
-    Serial.println("================================================\n");
+    ESP_LOGI(TAG, "\n================================================");
+    ESP_LOGI(TAG, "   ESP32-C3 Weather Clock (Page-based)");
+    ESP_LOGI(TAG, "================================================\n");
 
     wifiManager.connect();
     timeManager.update();
 
     if (wifiManager.isConnected()) {
-        Serial.println("[Main] WiFi连接成功，开始时间同步");
+        ESP_LOGI(TAG, "WiFi连接成功，开始时间同步");
         if (timeManager.sync()) {
-            Serial.println("[Main] NTP时间同步成功");
+            ESP_LOGI(TAG, "NTP时间同步成功");
         } else {
-            Serial.println("[Main] NTP时间同步失败，将在任务中重试");
+            ESP_LOGE(TAG, "NTP时间同步失败，将在任务中重试");
         }
     } else {
-        Serial.println("[Main] WiFi连接失败，开启AP配网模式");
+        ESP_LOGE(TAG, "WiFi连接失败，开启AP配网模式");
         wifiManager.startAPMode();
     }
 
@@ -269,7 +270,6 @@ void setup() {
     pAPModePage            = new APModePage(displayManager, wifiManager);
     pWiFiInfoPage          = new WiFiInfoPage(displayManager, wifiManager);
     pStreamingPlayerPage   = new StreamingPlayerPage(displayManager);
-    pFlipClockPage         = new FlipClockPage(displayManager);
 
     pageManager.registerPage(PageManager::PAGE_TEMP,         pTempPage);
     pageManager.registerPage(PageManager::PAGE_FORECAST,     pForecastPage);
@@ -279,7 +279,6 @@ void setup() {
     pageManager.registerPage(PageManager::PAGE_WIFI_INFO,    pWiFiInfoPage);
     pageManager.registerPage(PageManager::PAGE_AP_MODE,      pAPModePage);
     pageManager.registerPage(PageManager::PAGE_STREAMING,    pStreamingPlayerPage);
-    pageManager.registerPage(PageManager::PAGE_FLIP_CLOCK,   pFlipClockPage);
     
     pageManager.begin();
 
@@ -361,7 +360,7 @@ void handleChime() {
         currentMinute == 59 && currentSecond == 55 && 
         currentHour != lastChimeHour) {
         lastChimeHour = currentHour;
-        Serial.println("[Chime] 定时报时触发");
+        ESP_LOGI(TAG, "[Chime] 定时报时触发");
         buzzerController.radioChime();
     } else if (currentMinute != 59 || currentSecond != 55) {
         lastChimeHour = -1;
@@ -383,7 +382,7 @@ void handleBrightness(unsigned long now) {
         if (currentBacklightLevel != -1) {
             currentBacklightLevel = -1;  // 标记为未同步默认态, 同步后必触发切换
             setBacklightLevel(pwm80);
-            Serial.printf("[Brightness] NTP 未同步, 默认 80%% (PWM=%d)\n", pwm80);
+            ESP_LOGW(TAG, "[Brightness] NTP 未同步, 默认 80%% (PWM=%d)", pwm80);
         }
         yield();
         return;
@@ -394,7 +393,7 @@ void handleBrightness(unsigned long now) {
         int oldLevel = currentBacklightLevel;
         currentBacklightLevel = targetLevel;
         setBacklightLevel(BACKLIGHT_LEVELS[currentBacklightLevel]);
-        Serial.printf("[Brightness] Auto: %d -> %d\n",
+        ESP_LOGI(TAG, "[Brightness] Auto: %d -> %d",
             (oldLevel >= 0) ? BACKLIGHT_LEVELS[oldLevel] : -1,
             BACKLIGHT_LEVELS[currentBacklightLevel]);
     }

@@ -1,4 +1,7 @@
 #include "LEDController.h"
+#include <esp_log.h>
+
+static const char* TAG = "LED";
 
 LEDController::LEDController(int pin) 
     : _pin(pin), _state(LED_STATE_OFF), _lastToggle(0), _isOn(false),
@@ -9,7 +12,7 @@ void LEDController::begin() {
     if (_pin > 0) {
         pinMode(_pin, OUTPUT);
         digitalWrite(_pin, LOW);
-        Serial.printf("[LED] 初始化完成 | 引脚: GPIO%d\n", _pin);
+        ESP_LOGI(TAG, "初始化完成 | 引脚: GPIO%d", _pin);
     }
 }
 
@@ -71,14 +74,15 @@ void LEDController::setState(LEDState state) {
             _isOn = true;
         }
         
-        Serial.printf("[LED] 状态变更: ");
+        const char* stateName = "UNKNOWN";
         switch(state) {
-            case LED_STATE_OFF: Serial.println("OFF"); break;
-            case LED_STATE_ON: Serial.println("ON"); break;
-            case LED_STATE_BLINK_SLOW: Serial.println("BLINK_SLOW"); break;
-            case LED_STATE_BLINK_FAST: Serial.println("BLINK_FAST"); break;
-            case LED_STATE_BLINK_ONCE: Serial.println("BLINK_ONCE"); break;
+            case LED_STATE_OFF: stateName = "OFF"; break;
+            case LED_STATE_ON: stateName = "ON"; break;
+            case LED_STATE_BLINK_SLOW: stateName = "BLINK_SLOW"; break;
+            case LED_STATE_BLINK_FAST: stateName = "BLINK_FAST"; break;
+            case LED_STATE_BLINK_ONCE: stateName = "BLINK_ONCE"; break;
         }
+        ESP_LOGI(TAG, "状态变更: %s", stateName);
     }
 }
 

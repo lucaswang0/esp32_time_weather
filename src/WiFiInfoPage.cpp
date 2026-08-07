@@ -1,22 +1,24 @@
 #include "WiFiInfoPage.h"
+#include <esp_log.h>
 #include <TFT_eSPI.h>
 #include "font_small_20.h"
 #include "DisplayManager.h"
 
 
+static const char* TAG = "WiFiInfoPage";
 WiFiInfoPage::WiFiInfoPage(DisplayManager& display, WiFiManager& wifi)
     : _display(display), _wifi(wifi), _firstDraw(true), _lastUpdateTime(0) {
 }
 
 void WiFiInfoPage::onEnter() {
-    Serial.println("[WiFiInfoPage] onEnter");
+    ESP_LOGI(TAG, "onEnter");
     _display.clearScreen();
     _firstDraw = true;
     _lastUpdateTime = 0;
 }
 
 void WiFiInfoPage::onExit() {
-    Serial.println("[WiFiInfoPage] onExit");
+    ESP_LOGI(TAG, "onExit");
 }
 
 void WiFiInfoPage::update() {

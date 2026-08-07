@@ -7,7 +7,10 @@
 #endif
 
 #include "DisplayManager.h"
+#include <esp_log.h>
 #include <LittleFS.h>
+
+static const char* TAG = "Display";
 
 static fs::File pngFile;
 static TFT_eSPI* pngTft = nullptr;
@@ -28,7 +31,7 @@ static int currentBgIndex = 0;
 DisplayManager::DisplayManager() : lastBgDay(-1) {}
 
 void DisplayManager::init() {
-    Serial.println("[Display] 初始化显示屏...");
+    ESP_LOGI(TAG, "初始化显示屏...");
 
     tft.init();
     tft.setRotation(1);
@@ -39,10 +42,10 @@ void DisplayManager::init() {
         int today = lastBgDay;
         randomSeed(today);
         currentBgIndex = random(1, 6);
-        Serial.printf("[Display] Time synced, selecting background for day %d: bg%d\n", today, currentBgIndex);
+        ESP_LOGI(TAG, "Time synced, selecting background for day %d: bg%d", today, currentBgIndex);
     } else {
         currentBgIndex = 1;
-        Serial.println("[Display] Time not synced yet, using temporary background: bg1");
+        ESP_LOGI(TAG, "Time not synced yet, using temporary background: bg1");
     }
     bgSource = getBackgroundByIndex(currentBgIndex);
 
@@ -58,7 +61,7 @@ void DisplayManager::init() {
         tft.pushImage(0, row, SCREEN_WIDTH, 1, lineBuf);
     }
     tft.endWrite();
-    Serial.println("[Display] Background image loaded successfully (from PROGMEM)");
+    ESP_LOGI(TAG, "Background image loaded successfully (from PROGMEM)");
     
     tft.setTextDatum(TL_DATUM);
     drawTextWithTransparentBgFont("0000", 0, 10, COLOR_WHITE, font_small_20);
@@ -75,11 +78,11 @@ void DisplayManager::init() {
     drawTextWithTransparentBgFont("体:--°", 225, 126, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("湿:--%", 225, 150, COLOR_WHITE, font_small_20);
 
-    Serial.println("[Display] 显示屏初始化完成");
+    ESP_LOGI(TAG, "显示屏初始化完成");
 }
 
 void DisplayManager::clearScreen() {
-    Serial.printf("[Display] 栈高水位: %d\n", uxTaskGetStackHighWaterMark(NULL));
+    ESP_LOGI(TAG, "栈高水位: %d", uxTaskGetStackHighWaterMark(NULL));
 
     int today = -1;
     time_t now = time(NULL);
@@ -94,7 +97,7 @@ void DisplayManager::clearScreen() {
         randomSeed(today);
         currentBgIndex = random(1, 10);
         bgSource = getBackgroundByIndex(currentBgIndex);
-        Serial.printf("[Display] Day changed (%d), selecting new background: bg%d\n", today, currentBgIndex);
+        ESP_LOGI(TAG, "Day changed (%d), selecting new background: bg%d", today, currentBgIndex);
     }
     
     if (bgSource == nullptr) {
@@ -264,10 +267,10 @@ void DisplayManager::drawTextWithBgMode(const char* text, int x, int y, uint16_t
 }
 
 void* pngOpen(const char *filename, int32_t *size) {
-    Serial.printf("[PNG] Opening: %s\n", filename);
+    ESP_LOGI(TAG, "[PNG] Opening: %s", filename);
     pngFile = LittleFS.open(filename, FILE_READ);
     if (!pngFile) {
-        Serial.printf("[PNG] File open failed: %s\n", filename);
+        ESP_LOGE(TAG, "[PNG] File open failed: %s", filename);
         *size = 0;
         return NULL;
     }
@@ -326,12 +329,12 @@ void DisplayManager::drawWeatherIcon(int x, int y, const String& codeStr,
     // 现有默认参数兼容原 drawWeatherIcon 行为："/icon_" + code + ".png" → 回退 "/icon_100.png"
     // 月相调用：pathPrefix="/moon_icon_", fallback=nullptr → 失败时空着即可
     if (codeStr.isEmpty()) {
-        Serial.println("[Display] 图标代码为空");
+        ESP_LOGI(TAG, "图标代码为空");
         return;
     }
 
     String iconFile = String(pathPrefix) + codeStr + ".png";
-    Serial.printf("[Display] 图标代码: %s, 文件: %s\n", codeStr.c_str(), iconFile.c_str());
+    ESP_LOGI(TAG, "图标代码: %s, 文件: %s", codeStr.c_str(), iconFile.c_str());
 
     pngTft = &tft;
     pngObj = &png;
@@ -342,20 +345,20 @@ void DisplayManager::drawWeatherIcon(int x, int y, const String& codeStr,
     int16_t rc = png.open(iconFile.c_str(), pngOpen, pngClose, pngRead, pngSeek, pngDraw);
     if (rc != PNG_SUCCESS) {
         if (fallback == nullptr) {
-            Serial.printf("[PNG] %s 打开失败: %d, 无回退配置，跳过\n", iconFile.c_str(), rc);
+            ESP_LOGE(TAG, "[PNG] %s 打开失败: %d, 无回退配置，跳过", iconFile.c_str(), rc);
             return;
         }
-        Serial.printf("[PNG] %s 打开失败: %d, 尝试回退 %s\n", iconFile.c_str(), rc, fallback);
+        ESP_LOGW(TAG, "[PNG] %s 打开失败: %d, 尝试回退 %s", iconFile.c_str(), rc, fallback);
         iconFile = String(fallback);
         rc = png.open(iconFile.c_str(), pngOpen, pngClose, pngRead, pngSeek, pngDraw);
         if (rc != PNG_SUCCESS) {
-            Serial.printf("[PNG] 回退 %s 也失败: %d\n", fallback, rc);
+            ESP_LOGE(TAG, "[PNG] 回退 %s 也失败: %d", fallback, rc);
             return;
         }
     }
 
     tft.startWrite();
-    Serial.printf("[PNG] Image specs: (%d x %d), %d bpp\n", png.getWidth(), png.getHeight(), png.getBpp());
+    ESP_LOGI(TAG, "[PNG] Image specs: (%d x %d), %d bpp", png.getWidth(), png.getHeight(), png.getBpp());
 
     // 保护背景图：先把图标区域的当前背景图推上去（避免擦除背景图案）
     if (bgSource != nullptr) {
@@ -381,35 +384,35 @@ void DisplayManager::drawWeatherIcon(int x, int y, const String& codeStr,
 }
 
 bool DisplayManager::loadPNGWithBuffer(String filename) {
-    Serial.printf("[Display] 尝试内存缓冲加载: %s\n", filename.c_str());
+    ESP_LOGI(TAG, "尝试内存缓冲加载: %s", filename.c_str());
     
     uint32_t freeHeap = ESP.getFreeHeap();
-    Serial.printf("[Display] 加载前可用内存: %d bytes\n", freeHeap);
+    ESP_LOGI(TAG, "加载前可用内存: %d bytes", freeHeap);
     
     fs::File file = LittleFS.open(filename, "r");
     if (!file) {
-        Serial.println("[Display] ❌ 无法打开文件");
+        ESP_LOGE(TAG, "❌ 无法打开文件");
         return false;
     }
     
     size_t fileSize = file.size();
-    Serial.printf("[Display] 文件大小: %d bytes\n", fileSize);
+    ESP_LOGI(TAG, "文件大小: %d bytes", fileSize);
     
     if (fileSize > 50000) {
-        Serial.printf("[Display] ❌ 文件太大: %d bytes (限制50KB)\n", fileSize);
+        ESP_LOGE(TAG, "❌ 文件太大: %d bytes (限制50KB)", fileSize);
         file.close();
         return false;
     }
     
     if (freeHeap < fileSize + 20000) {
-        Serial.printf("[Display] ❌ 内存不足: 需要 %d, 可用 %d\n", fileSize + 20000, freeHeap);
+        ESP_LOGE(TAG, "❌ 内存不足: 需要 %d, 可用 %d", fileSize + 20000, freeHeap);
         file.close();
         return false;
     }
     
     uint8_t* fileBuffer = (uint8_t*)malloc(fileSize);
     if (!fileBuffer) {
-        Serial.println("[Display] ❌ 内存分配失败");
+        ESP_LOGE(TAG, "❌ 内存分配失败");
         file.close();
         return false;
     }
@@ -418,12 +421,12 @@ bool DisplayManager::loadPNGWithBuffer(String filename) {
     file.close();
     
     if (bytesRead != fileSize) {
-        Serial.printf("[Display] ❌ 读取不完整: %d/%d bytes\n", bytesRead, fileSize);
+        ESP_LOGE(TAG, "❌ 读取不完整: %d/%d bytes", bytesRead, fileSize);
         free(fileBuffer);
         return false;
     }
     
-    Serial.printf("[Display] ✅ 文件读取成功: %d bytes\n", bytesRead);
+    ESP_LOGI(TAG, "✅ 文件读取成功: %d bytes", bytesRead);
     
     pngTft = &tft;
     pngObj = &png;
@@ -432,16 +435,16 @@ bool DisplayManager::loadPNGWithBuffer(String filename) {
     pngIsBackground = true;
     
     int16_t rc = png.openRAM(fileBuffer, fileSize, pngDraw);
-    Serial.printf("[Display] png.openRAM() result: %d\n", rc);
+    ESP_LOGI(TAG, "png.openRAM() result: %d", rc);
     
     if (rc == PNG_SUCCESS) {
         int width = png.getWidth();
         int height = png.getHeight();
         int bpp = png.getBpp();
-        Serial.printf("[Display] PNG: %dx%d, %d bpp\n", width, height, bpp);
+        ESP_LOGI(TAG, "PNG: %dx%d, %d bpp", width, height, bpp);
         
         if (width > 320 || height > 170) {
-            Serial.printf("[Display] ⚠️ 图片尺寸异常: %dx%d\n", width, height);
+            ESP_LOGW(TAG, "⚠️ 图片尺寸异常: %dx%d", width, height);
             png.close();
             free(fileBuffer);
             return false;
@@ -455,14 +458,14 @@ bool DisplayManager::loadPNGWithBuffer(String filename) {
         free(fileBuffer);
         
         if (rc == PNG_SUCCESS) {
-            Serial.println("[Display] ✅ 内存缓冲解码成功");
+            ESP_LOGI(TAG, "✅ 内存缓冲解码成功");
             return true;
         } else {
-            Serial.printf("[Display] ❌ 内存缓冲解码失败: %d\n", rc);
+            ESP_LOGE(TAG, "❌ 内存缓冲解码失败: %d", rc);
             return false;
         }
     } else {
-        Serial.printf("[Display] ❌ PNG打开失败: %d\n", rc);
+        ESP_LOGE(TAG, "❌ PNG打开失败: %d", rc);
         free(fileBuffer);
         return false;
     }

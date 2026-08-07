@@ -1,10 +1,13 @@
 #include "BuzzerController.h"
 #include "config.h"
+#include <esp_log.h>
 
 #define BUZZER_LEDC_CHANNEL LEDC_CHANNEL
 #define BUZZER_BASE_FREQ    LEDC_BASE_FREQ
 #define BUZZER_RESOLUTION   LEDC_TIMER_BIT
 #define BUZZER_MAX_DUTY     ((1 << BUZZER_RESOLUTION) - 1)
+
+static const char* TAG = "Buzzer";
 
 BuzzerController::BuzzerController(int pin) : _pin(pin) {
 }
@@ -18,7 +21,7 @@ void BuzzerController::begin() {
         ledcAttachPin(_pin, BUZZER_LEDC_CHANNEL);
         ledcWrite(BUZZER_LEDC_CHANNEL, BUZZER_MAX_DUTY);
         
-        Serial.printf("[Buzzer] 初始化完成 | 引脚: GPIO%d, LEDC通道: %d, 低电平触发\n", _pin, BUZZER_LEDC_CHANNEL);
+        ESP_LOGI(TAG, "初始化完成 | 引脚: GPIO%d, LEDC通道: %d, 低电平触发", _pin, BUZZER_LEDC_CHANNEL);
     }
 }
 
@@ -63,7 +66,7 @@ void BuzzerController::radioChime() {
     delay(300);
     ledcWrite(BUZZER_LEDC_CHANNEL, BUZZER_MAX_DUTY);
     
-    Serial.println("[Buzzer] Radio chime finished");
+    ESP_LOGI(TAG, "Radio chime finished");
 }
 
 

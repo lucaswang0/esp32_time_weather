@@ -1,53 +1,60 @@
+// PageManager.cpp
+// 页面切换管理
+
 #include "PageManager.h"
 #include "TempPage.h"
 #include "CalendarPage.h"
 #include "ForecastPage.h"
 #include "PressurePage.h"
 #include "HistoryPage.h"
-#include "FlipClockPage.h"
+#include "WiFiInfoPage.h"
+#include "APModePage.h"
+#include "StreamingPlayerPage.h"
+#include <esp_log.h>
 
-static const char* PAGE_NAMES[] = {"温度", "3天预报",  "月历","气压", "历史", "网络信息", "AP配网", "流媒体", "翻页时钟"};
+static const char* PAGE_NAMES[] = {"温度", "3天预报", "月历","气压", "历史", "网络信息", "AP配网", "流媒体"};
 
+static const char* TAG = "PageManager";
 
 PageManager::PageManager(DisplayManager& disp)
-    : _display(disp) {
-    for (int i = 0; i < PAGE_COUNT; i++) {
+ : _display(disp) {
+    for (int i = 0; i < 8; i++) {
         _pages[i] = nullptr;
     }
     _current = PAGE_TEMP;
 }
 
 void PageManager::registerPage(PageMode mode, PageBase* page) {
-    if (mode < PAGE_COUNT) {
+    if (mode < 8) {
         _pages[mode] = page;
     }
 }
 
 void PageManager::begin() {
     _pages[_current]->onEnter();
-    Serial.printf("[PageManager] current = %s\n", PAGE_NAMES[_current]);
+    ESP_LOGI(TAG, "current = %s", PAGE_NAMES[_current]);
 }
 
 void PageManager::begin(PageMode initialMode) {
-    if (initialMode < PAGE_COUNT && _pages[initialMode] != nullptr) {
+    if (initialMode < 8 && _pages[initialMode] != nullptr) {
         _current = initialMode;
     }
     _pages[_current]->onEnter();
-    Serial.printf("[PageManager] current = %s\n", PAGE_NAMES[_current]);
+    ESP_LOGI(TAG, "current = %s", PAGE_NAMES[_current]);
 }
 
 void PageManager::next() {
     PageMode startMode = _current;
-    // 方案 A: 从 AP_MODE 短按 → 直接跳到 TempPage（退出 AP 配置）
+    // 从 AP_MODE 短按 → 直接跳到 TempPage（退出 AP 配置）
     if (_current == PAGE_AP_MODE) {
         if (_pages[PAGE_TEMP] != nullptr) {
             switchTo(PAGE_TEMP);
         }
         return;
     }
-    PageMode nextMode = (PageMode)((_current + 1) % PAGE_COUNT);
+    PageMode nextMode = (PageMode)((_current + 1) % 8);
     while ((_pages[nextMode] == nullptr || nextMode == PAGE_AP_MODE) && nextMode != startMode) {
-        nextMode = (PageMode)((nextMode + 1) % PAGE_COUNT);
+        nextMode = (PageMode)((nextMode + 1) % 8);
     }
     if (nextMode == startMode && _pages[startMode] == nullptr) {
         return;
@@ -57,16 +64,16 @@ void PageManager::next() {
 
 void PageManager::prev() {
     PageMode startMode = _current;
-    // 方案 A: 从 AP_MODE 双击 → 直接跳到 TempPage（退出 AP 配置）
+    // 从 AP_MODE 双击 → 直接跳到 TempPage（退出 AP 配置）
     if (_current == PAGE_AP_MODE) {
         if (_pages[PAGE_TEMP] != nullptr) {
             switchTo(PAGE_TEMP);
         }
         return;
     }
-    PageMode prevMode = (PageMode)((_current + PAGE_COUNT - 1) % PAGE_COUNT);
+    PageMode prevMode = (PageMode)((_current + 8 - 1) % 8);
     while ((_pages[prevMode] == nullptr || prevMode == PAGE_AP_MODE) && prevMode != startMode) {
-        prevMode = (PageMode)((prevMode + PAGE_COUNT - 1) % PAGE_COUNT);
+        prevMode = (PageMode)((prevMode + 8 - 1) % 8);
     }
     if (prevMode == startMode && _pages[startMode] == nullptr) {
         return;
@@ -75,17 +82,17 @@ void PageManager::prev() {
 }
 
 void PageManager::switchTo(PageMode mode) {
-    if (mode >= PAGE_COUNT) return;
-    if (_pages[mode] == nullptr) return;  // 跳过未注册
+    if (mode >= 8) return;
+    if (_pages[mode] == nullptr) return; // 跳过未注册
     if (mode == _current) return;
-    
+
     _display.fadeOut(200);
     _pages[_current]->onExit();
     _current = mode;
     _pages[_current]->onEnter();
     _display.fadeIn(200);
-    
-    Serial.printf("[PageManager] switched to %s\n", PAGE_NAMES[_current]);
+
+    ESP_LOGI(TAG, "switched to %s", PAGE_NAMES[_current]);
 }
 
 void PageManager::update() {

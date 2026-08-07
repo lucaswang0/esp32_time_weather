@@ -1,12 +1,14 @@
 #include "CalendarPage.h"
+#include <esp_log.h>
 #include "DisplayManager.h"
 #include "TimeManager.h"
 
+static const char* TAG = "CalendarPage";
 CalendarPage::CalendarPage(DisplayManager& disp, TimeManager& time)
     : _display(disp), _time(time) {}
 
 void CalendarPage::onEnter() {
-    Serial.println("[CalendarPage] onEnter");
+    ESP_LOGI(TAG, "onEnter");
     _display.clearScreen();
     lastCalendarYear = -1;
     lastCalendarMonth = -1;
@@ -95,7 +97,7 @@ void CalendarPage::drawCalendar(int year, int month, int day) {
         if (dayIndex >= 7) {
             dayIndex = 0;
             dayX = 20;
-            dayY += 27;
+            dayY += 22;
         }
     }
 

@@ -1,9 +1,12 @@
 #include "TaskManager.h"
+#include <esp_log.h>
 #include <Arduino.h>
 #include "config.h"
 #include "HistoryPage.h"
 #include "PressurePage.h"
 #include "TempPage.h"
+
+static const char* TAG = "TaskManager";
 
 TaskManager::TaskManager(
     WiFiManager& wifiManager,
@@ -106,7 +109,7 @@ void TaskManager::printMemoryUsage(const char* tag) {
     // HWM = 任务栈剩余最小值 (从栈基址往下)
     // used = 分配大小 - HWM (实际使用峰值)
     // ⚠️ = used > 80% (危险), ⚡ = used > 60% (警告), ✓ = 正常
-    Serial.printf("\n=== 内存快照 [%s] ===\n", tag);
+    ESP_LOGI(TAG, "\n=== 内存快照 [%s] ===", tag);
 
     struct TaskInfo {
         TaskHandle_t handle;
@@ -126,24 +129,24 @@ void TaskManager::printMemoryUsage(const char* tag) {
     uint32_t totalUsed  = 0;
     for (const auto& t : tasks) {
         if (t.handle == NULL) {
-            Serial.printf("  %-15s : [未创建]\n", t.name);
+            ESP_LOGI(TAG, "  %-15s : [未创建]", t.name);
             continue;
         }
         UBaseType_t hwm = uxTaskGetStackHighWaterMark(t.handle);
         uint32_t used = t.size - hwm;
         float pct = (t.size > 0) ? (used * 100.0f / t.size) : 0.0f;
         const char* mark = (pct > 80) ? " ⚠️" : (pct > 60) ? " ⚡" : " ✓";
-        Serial.printf("  %-15s : %5u B 剩 / %5u B 分配 | 用了 ~%5u B (%4.1f%%)%s\n",
+        ESP_LOGI(TAG, "  %-15s : %5u B 剩 / %5u B 分配 | 用了 ~%5u B (%4.1f%%)%s",
                       t.name, hwm, t.size, used, pct, mark);
         totalAlloc += t.size;
         totalUsed  += used;
     }
     float totalPct = (totalAlloc > 0) ? (totalUsed * 100.0f / totalAlloc) : 0.0f;
-    Serial.printf("  %-15s : %5u B 总用 / %5u B 总分配 (%4.1f%%)\n",
+    ESP_LOGI(TAG, "  %-15s : %5u B 总用 / %5u B 总分配 (%4.1f%%)",
                   "[任务栈合计]", totalUsed, totalAlloc, totalPct);
-    Serial.printf("  %-15s : %u B 剩余, 最大连续块: %u B\n",
+    ESP_LOGI(TAG, "  %-15s : %u B 剩余, 最大连续块: %u B",
                   "[堆]", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-    Serial.println("========================\n");
+    ESP_LOGI(TAG, "========================\n");
 }
 
 void TaskManager::stop() {
@@ -231,16 +234,16 @@ void TaskManager::taskWiFi() {
             if (_wifiManager.isAPStarted()) {
                 _wifiManager.handleClient();
                 if (_wifiManager.isConnected()) {
-                    Serial.println("[TaskWiFi] WiFi connected via config portal!");
+                    ESP_LOGI(TAG, "[TaskWiFi] WiFi connected via config portal!");
                     _wifiManager.stopAPMode();
                     _lastCurrentWeatherUpdate = 0;
                     _lastForecastUpdate = 0;
                 } else if (_pageManager.current() != PageManager::PAGE_AP_MODE) {
-                    Serial.println("[TaskWiFi] Left AP page, stopping AP and reconnecting WiFi...");
+                    ESP_LOGI(TAG, "[TaskWiFi] Left AP page, stopping AP and reconnecting WiFi...");
                     _wifiManager.stopAPMode();
                 }
             } else if (_pageManager.current() == PageManager::PAGE_AP_MODE) {
-                Serial.println("[TaskWiFi] AP mode stopped, switching back to temp page...");
+                ESP_LOGI(TAG, "[TaskWiFi] AP mode stopped, switching back to temp page...");
                 if (xSemaphoreTake(_displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     _pageManager.switchTo(PageManager::PAGE_TEMP);
                     xSemaphoreGive(_displayMutex);
@@ -248,9 +251,9 @@ void TaskManager::taskWiFi() {
             } else if (_wifiManager.isConnected()) {
                 _wifiManager.maintainConnection();
             } else {
-                Serial.println("[TaskWiFi] WiFi not connected, attempting connection...");
+                ESP_LOGI(TAG, "[TaskWiFi] WiFi not connected, attempting connection...");
                 if (_wifiManager.connect()) {
-                    Serial.println("[TaskWiFi] WiFi connection successful!");
+                    ESP_LOGI(TAG, "[TaskWiFi] WiFi connection successful!");
                     _lastCurrentWeatherUpdate = 0;
                     _lastForecastUpdate = 0;
                 }
@@ -278,25 +281,25 @@ void TaskManager::taskTimeSync() {
         
         if (!synced) {
             if (!_firstSyncAttempted) {
-                Serial.println("[TaskTimeSync] 首次时间同步尝试");
+                ESP_LOGI(TAG, "[TaskTimeSync] 首次时间同步尝试");
                 if (_timeManager.sync()) {
                     setTimeSynced(true);
                     _lastTimeSync = now;
-                    Serial.println("[TaskTimeSync] 首次时间同步成功");
+                    ESP_LOGI(TAG, "[TaskTimeSync] 首次时间同步成功");
                 } else {
                     _firstSyncAttempted = true;
                     _lastTimeSync = now;
-                    Serial.println("[TaskTimeSync] 首次时间同步失败，将每5分钟重试");
+                    ESP_LOGE(TAG, "[TaskTimeSync] 首次时间同步失败，将每5分钟重试");
                 }
             } else {
                 if (now - _lastTimeSync >= TIME_SYNC_INTERVAL_INITIAL) {
                     _lastTimeSync = now;
-                    Serial.println("[TaskTimeSync] 时间同步重试...");
+                    ESP_LOGW(TAG, "[TaskTimeSync] 时间同步重试...");
                     if (_timeManager.sync()) {
                         setTimeSynced(true);
-                        Serial.println("[TaskTimeSync] 时间同步成功");
+                        ESP_LOGI(TAG, "[TaskTimeSync] 时间同步成功");
                     } else {
-                        Serial.println("[TaskTimeSync] 时间同步失败，继续重试");
+                        ESP_LOGE(TAG, "[TaskTimeSync] 时间同步失败，继续重试");
                     }
                 }
             }
@@ -334,15 +337,15 @@ void TaskManager::taskWeather() {
         auto printHwm = [this](const char* stage) {
             UBaseType_t hwm = uxTaskGetStackHighWaterMark(NULL);
             if (hwm < 4096) {
-                Serial.printf("[TaskWeather] ⚠️  HWM after %s: %u bytes free (栈告警 < 4KB)\n", stage, hwm);
+                ESP_LOGW(TAG, "[TaskWeather] ⚠️  HWM after %s: %u bytes free (栈告警 < 4KB)", stage, hwm);
             } else {
-                Serial.printf("[TaskWeather] HWM after %s: %u bytes free\n", stage, hwm);
+                ESP_LOGI(TAG, "[TaskWeather] HWM after %s: %u bytes free", stage, hwm);
             }
             // 每 3 个阶段打一次完整内存快照 (避免日志刷屏)
             // 用 stage 名字后缀区分, 只在 stage2/stage4 (偶数) 打全量
             size_t freeHeap = ESP.getFreeHeap();
             size_t maxAlloc = ESP.getMaxAllocHeap();
-            Serial.printf("[TaskWeather] 堆状态 after %s: %u B 剩余, 最大块 %u B\n",
+            ESP_LOGI(TAG, "[TaskWeather] 堆状态 after %s: %u B 剩余, 最大块 %u B",
                           stage, freeHeap, maxAlloc);
         };
 
@@ -355,13 +358,13 @@ void TaskManager::taskWeather() {
                 size_t maxAlloc = ESP.getMaxAllocHeap();
                 if (maxAlloc >= needBytes) {
                     if (i > 0) {
-                        Serial.printf("[TaskWeather] 堆已恢复, 最大连续块: %u B (等待 %ds)\n",
+                        ESP_LOGI(TAG, "[TaskWeather] 堆已恢复, 最大连续块: %u B (等待 %ds)",
                                       maxAlloc, i);
                     }
                     return true;
                 }
                 if (i == 0 || i == 5 || i == 10) {
-                    Serial.printf("[TaskWeather] 堆碎片化, 最大连续块: %u B, 需 %u B, 尝试整理...\n",
+                    ESP_LOGW(TAG, "[TaskWeather] 堆碎片化, 最大连续块: %u B, 需 %u B, 尝试整理...",
                                   maxAlloc, needBytes);
                     // 强制整理：分配最大块后立即释放，触发 FreeRTOS 完整合并
                     void* ptr = malloc(maxAlloc);
@@ -369,14 +372,14 @@ void TaskManager::taskWeather() {
                         free(ptr);
                         size_t afterCompact = ESP.getMaxAllocHeap();
                         if (afterCompact > maxAlloc) {
-                            Serial.printf("[TaskWeather] 整理后: %u → %u B (合并 %u B)\n",
+                            ESP_LOGI(TAG, "[TaskWeather] 整理后: %u → %u B (合并 %u B)",
                                           maxAlloc, afterCompact, afterCompact - maxAlloc);
                         }
                     }
                 }
                 vTaskDelay(pdMS_TO_TICKS(1000));
             }
-            Serial.printf("[TaskWeather] 堆 15s 内未恢复 (最大块 %u B), 放弃本阶段\n",
+            ESP_LOGW(TAG, "[TaskWeather] 堆 15s 内未恢复 (最大块 %u B), 放弃本阶段",
                           ESP.getMaxAllocHeap());
             return false;
         };
@@ -401,15 +404,15 @@ void TaskManager::taskWeather() {
                 continue;
             }
             _lastIpLocationAttempt = now;
-            Serial.printf("[TaskWeather] 阶段一: 通过IP获取定位 (退避 %lus, 累计失败 %d)\n",
+            ESP_LOGI(TAG, "[TaskWeather] 阶段一: 通过IP获取定位 (退避 %lus, 累计失败 %d)",
                           retryDelay / 1000, _ipLocationFailCount);
             if (_weatherManager.fetchLocationByIP()) {
-                Serial.println("[TaskWeather] IP定位成功");
+                ESP_LOGI(TAG, "[TaskWeather] IP定位成功");
                 _ipLocationDone = true;
                 _ipLocationFailCount = 0;
             } else {
                 _ipLocationFailCount++;
-                Serial.printf("[TaskWeather] IP定位失败 (累计 %d 次), %lus 后重试\n",
+                ESP_LOGW(TAG, "[TaskWeather] IP定位失败 (累计 %d 次), %lus 后重试",
                               _ipLocationFailCount, retryDelay / 1000);
             }
             printHwm("stage1 IP-location");
@@ -434,12 +437,12 @@ void TaskManager::taskWeather() {
                     vTaskDelayUntil(&xLastWakeTime, xFrequency);
                     continue;
                 }
-                Serial.println("[TaskWeather] 阶段三: 获取当前天气");
+                ESP_LOGI(TAG, "[TaskWeather] 阶段三: 获取当前天气");
                 if (_weatherManager.fetchCurrentWeather()) {
-                    Serial.println("[TaskWeather] 当前天气获取成功");
+                    ESP_LOGI(TAG, "[TaskWeather] 当前天气获取成功");
                     _lastCurrentWeatherUpdate = now;
                 } else {
-                    Serial.println("[TaskWeather] 当前天气获取失败");
+                    ESP_LOGE(TAG, "[TaskWeather] 当前天气获取失败");
                 }
                 printHwm("stage3 current-weather");
             }
@@ -454,12 +457,12 @@ void TaskManager::taskWeather() {
                     vTaskDelayUntil(&xLastWakeTime, xFrequency);
                     continue;
                 }
-                Serial.println("[TaskWeather] 阶段四: 获取天气预报");
+                ESP_LOGI(TAG, "[TaskWeather] 阶段四: 获取天气预报");
                 if (_weatherManager.fetch3DayForecast()) {
-                    Serial.println("[TaskWeather] 天气预报获取成功");
+                    ESP_LOGI(TAG, "[TaskWeather] 天气预报获取成功");
                     _lastForecastUpdate = now;
                 } else {
-                    Serial.println("[TaskWeather] 天气预报获取失败");
+                    ESP_LOGE(TAG, "[TaskWeather] 天气预报获取失败");
                 }
                 printHwm("stage4 forecast");
             }
@@ -503,7 +506,7 @@ void TaskManager::taskHistory() {
                 int nextSlotMinute = ((currentMinute / 10) + 1) * 10;
                 int delayToNextSlot = (nextSlotMinute - currentMinute) * 60000;
                 _lastHistorySave = millis() - (unsigned long)(600000 - delayToNextSlot);
-                Serial.printf("[TaskHistory] NTP同步成功，历史保存首次对齐到 %02d:%02d（%d 分钟后）\n",
+                ESP_LOGI(TAG, "[TaskHistory] NTP同步成功，历史保存首次对齐到 %02d:%02d（%d 分钟后）",
                               (nextSlotMinute / 60) % 24, nextSlotMinute % 60,
                               delayToNextSlot / 60000);
             } else {
@@ -522,14 +525,14 @@ void TaskManager::taskHistory() {
                         _sensor.getHumidity(),
                         _sensor.getPressure()
                     );
-                    Serial.printf("[TaskHistory] 保存传感器数据: 温度=%.1f°C 湿度=%.1f%% 气压=%.1fhPa\n",
+                    ESP_LOGI(TAG, "[TaskHistory] 保存传感器数据: 温度=%.1f°C 湿度=%.1f%% 气压=%.1fhPa",
                         _sensor.getTemperature(),
                         _sensor.getHumidity(),
                         _sensor.getPressure());
                 }
                 
                 if (_pressurePage != nullptr && _pressurePage->checkAlert()) {
-                    Serial.println("[TaskHistory] 气压警告触发，自动切换到气压页面！");
+                    ESP_LOGW(TAG, "[TaskHistory] 气压警告触发，自动切换到气压页面！");
                     if (xSemaphoreTake(_displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                         _pageManager.switchTo(PageManager::PAGE_PRESSURE);
                         xSemaphoreGive(_displayMutex);

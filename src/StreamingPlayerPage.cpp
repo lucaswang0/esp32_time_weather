@@ -2,9 +2,12 @@
 #include "font_small_20.h"
 #include "DisplayManager.h"
 #include <lwip/sockets.h>
+#include <esp_log.h>
 
 #define SERVER_HOST "localpc.com"
 #define SERVER_PORT 8888
+
+static const char* TAG = "STREAM";
 
 StreamingPlayerPage::StreamingPlayerPage(DisplayManager& display) : _display(display) {
     _lastFpsUpdateTime = millis();
@@ -43,7 +46,7 @@ void StreamingPlayerPage::onEnter() {
     tft.fillScreen(TFT_BLACK);
     
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[STREAM] No WiFi");
+        ESP_LOGI(TAG, "No WiFi");
         _state = ST_ERROR;
         drawErrorScreen("请先连接WiFi");
         return;
@@ -119,10 +122,10 @@ bool StreamingPlayerPage::connectToServer() {
     // 等待 socket 完全释放（避免 TIME_WAIT 状态冲突）
     delay(100);
 
-    Serial.printf("[STREAM] Connecting to %s:%d...\n", SERVER_HOST, SERVER_PORT);
+    ESP_LOGI(TAG, "Connecting to %s:%d...", SERVER_HOST, SERVER_PORT);
 
     if (!_tcpClient.connect(SERVER_HOST, SERVER_PORT, 5000)) {
-        Serial.println("[STREAM] Connection failed");
+        ESP_LOGI(TAG, "Connection failed");
         _tcpClient.stop();  // 清理 socket
         return false;
     }
@@ -137,7 +140,7 @@ bool StreamingPlayerPage::connectToServer() {
     _rdPos = 0;
     _lastFrameT = millis();
     
-    Serial.println("[STREAM] Connected successfully");
+    ESP_LOGI(TAG, "Connected successfully");
     return true;
 }
 
@@ -153,12 +156,12 @@ void StreamingPlayerPage::update() {
         _lastConnectAttempt = n;
         
         if (connectToServer()) {
-            Serial.println("[STREAM] Connected, entering PLAYING state");
+            ESP_LOGI(TAG, "Connected, entering PLAYING state");
             _state = ST_PLAYING;
             _connectionFailureCount = 0;
         } else {
             _connectionFailureCount++;
-            Serial.printf("[STREAM] Connection attempt %d/%d failed\n", _connectionFailureCount, MAX_CONNECTION_FAILURES);
+            ESP_LOGW(TAG, "Connection attempt %d/%d failed", _connectionFailureCount, MAX_CONNECTION_FAILURES);
             
             if (_connectionFailureCount >= MAX_CONNECTION_FAILURES) {
                 _state = ST_ERROR;
@@ -170,7 +173,7 @@ void StreamingPlayerPage::update() {
     
     if (_state == ST_PLAYING) {
         if (!_tcpClient.connected()) {
-            Serial.println("[STREAM] Connection lost");
+            ESP_LOGI(TAG, "Connection lost");
             _state = ST_CONNECTING;
             _lastConnectAttempt = 0;
             drawConnectingScreen();
@@ -224,7 +227,7 @@ void StreamingPlayerPage::update() {
                     }
 
                     if (_dataLen > MAX_CHUNK_SIZE) {
-                        Serial.printf("[STREAM] Error: DataLen(%u) exceeds buffer size(%u)\n",
+                        ESP_LOGE(TAG, "Error: DataLen(%u) exceeds buffer size(%u)",
                                       _dataLen, MAX_CHUNK_SIZE);
                         _tcpClient.stop();
                         _state = ST_CONNECTING;
@@ -284,12 +287,12 @@ void StreamingPlayerPage::update() {
 
 void StreamingPlayerPage::onTouch(PageTouchType type) {
     if (type == TOUCH_SHORT_BASE) {
-        Serial.println("[STREAM] Touch - exiting");
+        ESP_LOGI(TAG, "Touch - exiting");
         return;
     }
     
     if (type == TOUCH_DOUBLE_BASE && (_state == ST_ERROR || _state == ST_CONNECTING)) {
-        Serial.println("[STREAM] Double touch - retrying");
+        ESP_LOGI(TAG, "Double touch - retrying");
         _state = ST_CONNECTING;
         _connectionFailureCount = 0;
         _lastConnectAttempt = 0;

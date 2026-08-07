@@ -1,16 +1,19 @@
 #include "TimeManager.h"
+#include <esp_log.h>
 #include "config.h"
+
+static const char* TAG = "Time";
 
 TimeManager::TimeManager(WiFiManager& wifiManager) : wifiManager(wifiManager),
     year(0), month(0), day(0), hour(0), minute(0), second(0), weekday(0) {}
 
 bool TimeManager::sync() {
     if (!wifiManager.isConnected()) {
-        Serial.println("[NTP] WiFi not connected, skip sync");
+        ESP_LOGI(TAG, "[NTP] WiFi not connected, skip sync");
         return false;
     }
     
-    Serial.print("[NTP] Syncing time...");
+    ESP_LOGI(TAG, "[NTP] Syncing time...");
     configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC,
                "ntp.aliyun.com", "pool.ntp.org", "time.google.com");
     
@@ -18,7 +21,7 @@ bool TimeManager::sync() {
     int retry = 0;
     while (!getLocalTime(&timeinfo, 0) && retry < 10) {
         delay(1000);
-        Serial.print(".");
+        ESP_LOGI(TAG, ".");
         retry++;
     }
     
@@ -30,12 +33,12 @@ bool TimeManager::sync() {
         minute = timeinfo.tm_min;
         second = timeinfo.tm_sec;
         weekday = timeinfo.tm_wday;
-        Serial.println(" ✅");
-        Serial.printf("   Time: %04d-%02d-%02d %02d:%02d:%02d\n",
+        ESP_LOGI(TAG, " ✅");
+        ESP_LOGI(TAG, "   Time: %04d-%02d-%02d %02d:%02d:%02d",
                       year, month, day, hour, minute, second);
         return true;
     }
-    Serial.println(" ❌");
+    ESP_LOGE(TAG, " ❌");
     return false;
 }
 

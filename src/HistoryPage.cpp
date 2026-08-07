@@ -5,6 +5,7 @@
 #include <time.h>
 #include <LittleFS.h>
 #include <sys/time.h>
+#include <esp_log.h>
 
 // 中灰背景 (#444444 -> RGB565 0x2108)；黑字改为白色，表现黑底风格
 #define COLOR_BG_HISTORY  0x2108
@@ -14,6 +15,8 @@
 #define COLOR_HUMI        0xCFE7  // 亮青，湿度线
 #define COLOR_PRESS       0x07FF  // 亮青蓝，气压线
 #define COLOR_TEXT        0xFFFF  // 白字（前向替代 TFT_BLACK）
+
+static const char* TAG = "HistoryPage";
 
 HistoryPage::HistoryPage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
     : _display(disp), _aht20(aht20), historyCount(0) {
@@ -29,7 +32,7 @@ HistoryPage::~HistoryPage() {
 }
 
 void HistoryPage::onEnter() {
-    Serial.println("[HistoryPage] onEnter");
+    ESP_LOGI(TAG, "onEnter");
     if (history == nullptr) {
         history = new WeatherRecord[MAX_HISTORY_BUFFER]();
     }
@@ -96,7 +99,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
 
     // 如果超过 144 条，不再保存（避免无限增长）
     if (existingCount >= MAX_HISTORY_POINTS) {
-        Serial.printf("[HistoryPage] %s 已达上限 %d 条，跳过本次保存\n", filename, MAX_HISTORY_POINTS);
+        ESP_LOGW(TAG, "%s 已达上限 %d 条，跳过本次保存", filename, MAX_HISTORY_POINTS);
         return;
     }
 
@@ -120,7 +123,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
             headFile.write((const uint8_t*)&existingCount, sizeof(existingCount));
             headFile.close();
         } else {
-            Serial.println("[HistoryPage] saveRecordToDailyFile: head update failed (r+)");
+            ESP_LOGI(TAG, "saveRecordToDailyFile: head update failed (r+)");
             return;
         }
     }
@@ -128,7 +131,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
     // 用 APPEND 模式真实追加 record 到文件末尾
     fs::File file = LittleFS.open(filename, FILE_APPEND);
     if (!file) {
-        Serial.println("[HistoryPage] saveRecordToDailyFile: File open failed (APPEND)");
+        ESP_LOGI(TAG, "saveRecordToDailyFile: File open failed (APPEND)");
         return;
     }
     if (isNewFile) {
@@ -141,7 +144,7 @@ void HistoryPage::saveRecordToDailyFile(float temp, float humidity, float pressu
     }
     file.close();
 
-    Serial.printf("[HistoryPage] 已保存(平均): T=%.2f°C H=%.2f%% P=%.2fhPa -> %s (%d/%d)\n",
+    ESP_LOGI(TAG, "已保存(平均): T=%.2f°C H=%.2f%% P=%.2fhPa -> %s (%d/%d)",
         temp, humidity, pressure, filename, existingCount, MAX_HISTORY_POINTS);
 }
 
@@ -155,7 +158,7 @@ void HistoryPage::saveToLittleFS() {
     
     fs::File file = LittleFS.open(filename, FILE_WRITE);
     if (!file) {
-        Serial.println("[HistoryPage] saveToLittleFS: File open failed");
+        ESP_LOGI(TAG, "saveToLittleFS: File open failed");
         return;
     }
     
@@ -165,12 +168,12 @@ void HistoryPage::saveToLittleFS() {
     }
     
     file.close();
-    Serial.printf("[HistoryPage] saveToLittleFS: Saved %d records to %s\n", historyCount, filename);
+    ESP_LOGI(TAG, "saveToLittleFS: Saved %d records to %s", historyCount, filename);
 }
 
 void HistoryPage::loadFromLittleFS() {
     if (history == nullptr) {
-        Serial.println("[HistoryPage] loadFromLittleFS: history not allocated, skip");
+        ESP_LOGE(TAG, "loadFromLittleFS: history not allocated, skip");
         return;
     }
     historyCount = 0;
@@ -184,7 +187,7 @@ void HistoryPage::loadFromLittleFS() {
     
     fs::File file = LittleFS.open(filename, FILE_READ);
     if (!file) {
-        Serial.printf("[HistoryPage] loadFromLittleFS: 文件不存在 %s\n", filename);
+        ESP_LOGW(TAG, "loadFromLittleFS: 文件不存在 %s", filename);
         return;
     }
     
@@ -197,7 +200,7 @@ void HistoryPage::loadFromLittleFS() {
     size_t fileSize = file.size();
     size_t expectedSize = sizeof(fileCount) + sizeof(WeatherRecord) * fileCount;
     if (fileCount <= 0 || fileCount > MAX_HISTORY_POINTS || expectedSize > fileSize) {
-        Serial.printf("[HistoryPage] loadFromLittleFS: fileCount=%d 异常 (%s)，跳过\n", fileCount, filename);
+        ESP_LOGW(TAG, "loadFromLittleFS: fileCount=%d 异常 (%s)，跳过", fileCount, filename);
         file.close();
         return;
     }
@@ -215,8 +218,8 @@ void HistoryPage::loadFromLittleFS() {
     }
     
     file.close();
-    Serial.printf("[HistoryPage] loadFromLittleFS: Loaded %d records from %s\n", fileCount, filename);
-    Serial.printf("[HistoryPage] loadFromLittleFS: Total %d records loaded\n", historyCount);
+    ESP_LOGI(TAG, "loadFromLittleFS: Loaded %d records from %s", fileCount, filename);
+    ESP_LOGI(TAG, "loadFromLittleFS: Total %d records loaded", historyCount);
 }
 
 void HistoryPage::drawStatusBar() {
@@ -404,15 +407,15 @@ void HistoryPage::checkAndCleanOldFiles() {
     size_t usedBytes = LittleFS.usedBytes();
     float usagePercent = (float)usedBytes / totalBytes * 100;
     
-    Serial.printf("[HistoryPage] LittleFS usage: %.1f%% (%zu/%zu bytes)\n", usagePercent, usedBytes, totalBytes);
+    ESP_LOGI(TAG, "LittleFS usage: %.1f%% (%zu/%zu bytes)", usagePercent, usedBytes, totalBytes);
     
     // 如果空间使用超过80%，清理最老的文件
     if (usagePercent > 80.0) {
-        Serial.println("[HistoryPage] Storage space low, cleaning old files...");
+        ESP_LOGW(TAG, "Storage space low, cleaning old files...");
         
         fs::File root = LittleFS.open("/");
         if (!root) {
-            Serial.println("[HistoryPage] Failed to open root directory");
+            ESP_LOGI(TAG, "Failed to open root directory");
             return;
         }
         
@@ -453,9 +456,9 @@ void HistoryPage::checkAndCleanOldFiles() {
         // 删除最老的文件
         if (oldestFile.length() > 0) {
             if (LittleFS.remove(oldestFile)) {
-                Serial.printf("[HistoryPage] Deleted old file: %s\n", oldestFile.c_str());
+                ESP_LOGI(TAG, "Deleted old file: %s", oldestFile.c_str());
             } else {
-                Serial.printf("[HistoryPage] Failed to delete: %s\n", oldestFile.c_str());
+                ESP_LOGE(TAG, "Failed to delete: %s", oldestFile.c_str());
             }
         }
     }

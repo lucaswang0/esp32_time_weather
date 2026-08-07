@@ -1,16 +1,18 @@
 #include "ForecastPage.h"
+#include <esp_log.h>
 #include "DisplayManager.h"
 #include "WeatherManager.h"
 #include "TimeManager.h"
 #include "WiFiManager.h"
 #include "font_small_20.h"
 
+static const char* TAG = "ForecastPage";
 ForecastPage::ForecastPage(DisplayManager& disp, WeatherManager& weather,
                            TimeManager& time, WiFiManager& wifi)
     : _display(disp), _weather(weather), _time(time), _wifi(wifi) {}
 
 void ForecastPage::onEnter() {
-    Serial.println("[ForecastPage] onEnter");
+    ESP_LOGI(TAG, "onEnter");
     _display.clearScreen();
     lastForecastPageKey = "";
 }

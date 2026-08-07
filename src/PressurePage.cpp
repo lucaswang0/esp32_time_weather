@@ -1,6 +1,9 @@
 #include "PressurePage.h"
+#include <esp_log.h>
 #include <LittleFS.h>
 #include <time.h>
+
+static const char* TAG = "PressurePage";
 
 // 与 HistoryPage 中 WeatherRecord 完全兼容的内部结构体
 struct PressureRecord {
@@ -21,7 +24,7 @@ PressurePage::PressurePage(DisplayManager& disp, AHT20BMP280Sensor& aht20)
       lastDrawTime(0) {}
 
 void PressurePage::onEnter() {
-    Serial.println("[PressurePage] onEnter");
+    ESP_LOGI(TAG, "onEnter");
     // 先刷新历史记录数与3h变化量等显示数据（从 LittleFS 读取当天文件）
     checkAlert();
     // 加载背景图（DisplayManager 内部从 PROGMEM bg2-bg9 选择并加载）
@@ -62,7 +65,7 @@ bool PressurePage::checkAlert() {
 
     fs::File file = LittleFS.open(filename, FILE_READ);
     if (!file) {
-        Serial.printf("[PressurePage] checkAlert: 无法打开文件 %s\n", filename);
+        ESP_LOGE(TAG, "checkAlert: 无法打开文件 %s", filename);
         lastChange3h = 0.0f;
         lastWarningLevel = "--";
         lastRecordCount = 0;
@@ -84,7 +87,7 @@ bool PressurePage::checkAlert() {
             fileCount = (int)((fileSize - sizeof(fileCount)) / sizeof(PressureRecord));
             if (fileCount > 144) fileCount = 144;
             file.seek(sizeof(fileCount), fs::SeekSet);
-            Serial.printf("[PressurePage] checkAlert: fileCount 异常，按文件大小推算=%d\n", fileCount);
+            ESP_LOGW(TAG, "checkAlert: fileCount 异常，按文件大小推算=%d", fileCount);
         } else {
             file.close();
             lastChange3h = 0.0f;
@@ -98,7 +101,7 @@ bool PressurePage::checkAlert() {
     PressureRecord* records = new PressureRecord[fileCount];
     if (!records) {
         file.close();
-        Serial.println("[PressurePage] checkAlert: 内存分配失败");
+        ESP_LOGE(TAG, "checkAlert: 内存分配失败");
         return false;
     }
 
@@ -130,7 +133,7 @@ bool PressurePage::checkAlert() {
         lastWarningLevel = "正常";
     }
 
-    Serial.printf("[PressurePage] checkAlert: 3h变化=%.2f hPa | 等级=%s | 记录=%d/%d\n",
+    ESP_LOGI(TAG, "checkAlert: 3h变化=%.2f hPa | 等级=%s | 记录=%d/%d",
         lastChange3h, lastWarningLevel.c_str(), useCount, ALERT_RECORDS_NEEDED);
 
     // 仅"警告"级别返回 true（触发自动切换页面）

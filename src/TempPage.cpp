@@ -3,6 +3,9 @@
 #include "WeatherManager.h"
 #include "AHT20BMP280Sensor.h"
 #include "WiFiManager.h"
+#include <esp_log.h>
+
+static const char* TAG = "TempPage";
 
 TempPage::TempPage(DisplayManager& disp, WeatherManager& weather,
                    AHT20BMP280Sensor& aht20, WiFiManager& wifi)
@@ -17,7 +20,7 @@ TempPage::TempPage(DisplayManager& disp, WeatherManager& weather,
 }
 
 void TempPage::onEnter() {
-    Serial.println("[TempPage] onEnter");
+    ESP_LOGI(TAG, "onEnter");
     _display.clearScreen();
     lastHour = -1;
     lastMinute = -1;
@@ -98,14 +101,14 @@ void TempPage::drawTime(int year, int month, int day, int hour, int minute, int 
 
         char dateStr[20];
         sprintf(dateStr, "%04d.%02d.%02d %s", year, month, day, weekdays[weekday]);
-        Serial.printf("[TempPage] DATE draw at 0,150 = %s\n", dateStr);
+        ESP_LOGI(TAG, "DATE draw at 0,150 = %s", dateStr);
         _display.drawTextWithTransparentBgFont(dateStr, 0, 150, COLOR_WHITE, font_small_20);
     }
 }
 
 void TempPage::drawWeather(const String& city, const String& weather, const String& temp, const String& weatherCode, bool forecastValid) {
     if (lastCity != city) {
-        Serial.printf("[TempPage] 城市变更: %s\n", city.c_str());
+        ESP_LOGI(TAG, "城市变更: %s", city.c_str());
         lastCity = city;
         
         String cityStr = city.length() > 0 ? city : "--";
@@ -113,7 +116,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
     }
     
     if (lastWeather != weather || lastForecastValid != forecastValid) {
-        Serial.printf("[TempPage] 天气文字变更: %s | 预报有效: %s\n", weather.c_str(), forecastValid ? "是" : "否");
+        ESP_LOGI(TAG, "天气文字变更: %s | 预报有效: %s", weather.c_str(), forecastValid ? "是" : "否");
         lastWeather = weather;
         lastForecastValid = forecastValid;
         
@@ -133,13 +136,13 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
     }
     
     if (lastWeatherCode != weatherCode) {
-        Serial.printf("[TempPage] 天气代码变更: %s\n", weatherCode.c_str());
+        ESP_LOGI(TAG, "天气代码变更: %s", weatherCode.c_str());
         lastWeatherCode = weatherCode;
         _display.drawWeatherIcon(200, 20, weatherCode);
     }
     
     if (lastTemp != temp) {
-        Serial.printf("[TempPage] 温度变更: %s\n", temp.c_str());
+        ESP_LOGI(TAG, "温度变更: %s", temp.c_str());
         lastTemp = temp;
         
         String tempStr = "外:" + (temp.length() > 0 ? temp : "--");

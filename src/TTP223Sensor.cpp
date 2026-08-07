@@ -1,4 +1,7 @@
 #include "TTP223Sensor.h"
+#include <esp_log.h>
+
+static const char* TAG = "TTP223";
 
 TTP223Sensor::TTP223Sensor(int pin) : _pin(pin) {
 }
@@ -15,7 +18,7 @@ void TTP223Sensor::begin() {
     _veryLongPressHandled = false;
     _lastTouchType = TOUCH_NONE;
     _newTouchAvailable = false;
-    Serial.printf("[TTP223] Sensor initialized on GPIO%d\n", _pin);
+    ESP_LOGI(TAG, "Sensor initialized on GPIO%d", _pin);
 }
 
 void TTP223Sensor::update() {
@@ -41,13 +44,13 @@ void TTP223Sensor::update() {
                 _veryLongPressHandled = false;
                 
                 unsigned long timeSinceLastTouch = millis() - _lastTouchEndTime;
-                Serial.printf("[TTP223] Touch pressed | timeSinceLast: %lu ms | clickCount: %d\n", timeSinceLastTouch, _clickCount);
+                ESP_LOGI(TAG, "Touch pressed | timeSinceLast: %lu ms | clickCount: %d", timeSinceLastTouch, _clickCount);
                 
                 if (timeSinceLastTouch < DOUBLE_CLICK_TIMEOUT && _clickCount == 1) {
                     _clickCount = 0;
                     _lastTouchType = TOUCH_DOUBLE;
                     _newTouchAvailable = true;
-                    Serial.println("[TTP223] === DOUBLE CLICK DETECTED ===");
+                    ESP_LOGI(TAG, "=== DOUBLE CLICK DETECTED ===");
                 } else {
                     _clickCount = 1;
                 }
@@ -56,14 +59,14 @@ void TTP223Sensor::update() {
                 _lastTouchEndTime = millis();
                 
                 unsigned long touchDuration = millis() - _touchStartTime;
-                Serial.printf("[TTP223] Touch released | duration: %lu ms\n", touchDuration);
+                ESP_LOGI(TAG, "Touch released | duration: %lu ms", touchDuration);
                 
                 if (touchDuration >= LONG_PRESS_THRESHOLD) {
                     _lastTouchType = TOUCH_LONG;
                     _newTouchAvailable = true;
                     _clickCount = 0;
                     _longPressHandled = true;
-                    Serial.println("[TTP223] === LONG TOUCH DETECTED ===");
+                    ESP_LOGI(TAG, "=== LONG TOUCH DETECTED ===");
                 }
             }
         }
@@ -77,7 +80,7 @@ void TTP223Sensor::update() {
             _clickCount = 0;
             _longPressHandled = true;
             _veryLongPressHandled = true;
-            Serial.println("[TTP223] === VERY LONG TOUCH DETECTED (10s) ===");
+            ESP_LOGI(TAG, "=== VERY LONG TOUCH DETECTED (10s) ===");
         }
     }
 
@@ -101,7 +104,7 @@ void TTP223Sensor::update() {
             _lastTouchType = TOUCH_SHORT;
             _newTouchAvailable = true;
             _clickCount = 0;
-            Serial.println("[TTP223] === SHORT TOUCH DETECTED ===");
+            ESP_LOGI(TAG, "=== SHORT TOUCH DETECTED ===");
         }
     }
 }

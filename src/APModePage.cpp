@@ -1,13 +1,15 @@
 #include "APModePage.h"
+#include <esp_log.h>
 #include "config.h"
 #include "font_small_20.h"
 
+static const char* TAG = "APModePage";
 APModePage::APModePage(DisplayManager& display, WiFiManager& wifi)
     : _display(display), _wifi(wifi), _apStartTime(0), _lastDrawTime(0), _firstDraw(true) {
 }
 
 void APModePage::onEnter() {
-    Serial.println("[APModePage] onEnter");
+    ESP_LOGI(TAG, "onEnter");
     _apStartTime = millis();
     _lastDrawTime = 0;
     _firstDraw = true;
@@ -17,10 +19,10 @@ void APModePage::onEnter() {
 }
 
 void APModePage::onExit() {
-    Serial.println("[APModePage] onExit");
+    ESP_LOGI(TAG, "onExit");
     // 方案 A+D 配套: 退出 AP 页面时主动停止 AP 模式（不保存配置则关闭 AP）
     if (_wifi.isAPStarted()) {
-        Serial.println("[APModePage] Stopping AP mode on exit");
+        ESP_LOGI(TAG, "Stopping AP mode on exit");
         _wifi.stopAPMode();
     }
 }
@@ -39,7 +41,7 @@ void APModePage::update() {
     // AP 模式下永远不会触发, 所以这里手动检查并停止 AP
     if (!_wifi.isAPStarted() || getRemainingSeconds() == 0) {
         if (_wifi.isAPStarted()) {
-            Serial.println("[APModePage] Countdown ended, stopping AP mode");
+            ESP_LOGI(TAG, "Countdown ended, stopping AP mode");
             _wifi.stopAPMode();
             // TaskManager 会在下一轮 WiFi 检查时发现 AP 关闭 + 当前在 AP_MODE
             // → 自动 switchTo(PAGE_TEMP)
