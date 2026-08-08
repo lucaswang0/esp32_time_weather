@@ -8,7 +8,7 @@
 #include <PNGdec.h>
 #include "font_large_72.h"
 #include "font_medium_32.h"
-#include "font_small_20.h"
+#include "xfont.h"
 #include "config.h"
 #include "bg4.h"
 #include "bg6.h"
@@ -45,6 +45,7 @@ struct DailyForecast;
 class DisplayManager {
 public:
     DisplayManager();
+    ~DisplayManager();
     void init();
     void showConnecting();
     void showConfigMode();
@@ -55,7 +56,13 @@ public:
     void drawTextWithBgFont(const char* text, int x, int y, uint16_t color, const uint8_t* font);
     void drawTextWithTransparentBg(const char* text, int x, int y, uint16_t color);
     void drawTextWithTransparentBgFont(const char* text, int x, int y, uint16_t color, const uint8_t* font);
-    
+
+    // XFont 相关公开接口（20px 全字库中文，替代原 font_small_20 的直接 drawString 用法）
+    XFont* getXFont() { return _xFont; }
+    int getXFontTextWidth(const char* text);
+    // datum: TL_DATUM / TC_DATUM / TR_DATUM（其余按 TL 处理），直接绘屏幕
+    void drawTextXFont(const char* text, int x, int y, uint16_t color, int datum = TL_DATUM);
+
     TFT_eSPI& getTFT() { return tft; }
     
     void fadeOut(int durationMs = 200);
@@ -79,11 +86,13 @@ public:
 private:
     TFT_eSPI tft;
     PNG png;
-    
+    XFont* _xFont = nullptr;
     int lastBgDay = -1;
-    
+
     void drawTextWithBgMode(const char* text, int x, int y, uint16_t color,
                              const uint8_t* font, uint16_t bgColor);
+    // 20px xfont 画布合成版（透明取 bgSource / auto-fill 取 readRect / 纯色）
+    void drawTextXFontBg(const char* text, int x, int y, uint16_t color, uint16_t bgColor);
 };
 
 #endif

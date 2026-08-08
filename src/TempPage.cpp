@@ -90,7 +90,7 @@ void TempPage::drawTime(int year, int month, int day, int hour, int minute, int 
         
         char secStr[5];
         sprintf(secStr, "%02d", second);
-        _display.drawTextWithTransparentBgFont(secStr, 78, 28, COLOR_WHITE, font_small_20);
+        _display.drawTextWithTransparentBg(secStr, 78, 28, COLOR_WHITE);
     }
     
     if (lastYear != year || lastMonth != month || lastDay != day) {
@@ -102,7 +102,7 @@ void TempPage::drawTime(int year, int month, int day, int hour, int minute, int 
         char dateStr[20];
         sprintf(dateStr, "%04d.%02d.%02d %s", year, month, day, weekdays[weekday]);
         ESP_LOGI(TAG, "DATE draw at 0,150 = %s", dateStr);
-        _display.drawTextWithTransparentBgFont(dateStr, 0, 150, COLOR_WHITE, font_small_20);
+        _display.drawTextWithTransparentBg(dateStr, 0, 150, COLOR_WHITE);
     }
 }
 
@@ -122,16 +122,14 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         
         String weatherStr = weather.length() > 0 ? weather : "--";
         _display.drawTextWithTransparentBg(weatherStr.c_str(), 270, 40, COLOR_WHITE);
-        
-        TFT_eSPI& tft = _display.getTFT();
-        tft.loadFont(font_small_20);
-        int weatherWidth = tft.textWidth(weatherStr);
-        int weatherHeight = tft.fontHeight();
-        tft.unloadFont();
-        
+
+        int weatherWidth = _display.getXFontTextWidth(weatherStr.c_str());
+        int weatherHeight = 20; // xfont 20px 字号
+
         int circleX = 270 + weatherWidth + 6;
         int circleY = 40 + weatherHeight / 2;
         uint16_t circleColor = forecastValid ? COLOR_GREEN : COLOR_GOLD_WARM;
+        TFT_eSPI& tft = _display.getTFT();
         tft.fillCircle(circleX, circleY, 5, circleColor);
     }
     
@@ -242,7 +240,7 @@ void TempPage::drawWiFiStatus(bool connected) {
         lastRSSI = rssi;
 
         if (!connected) {
-            _display.drawTextWithTransparentBgFont("--", 280, 3, COLOR_GRAY_DARK, font_small_20);
+            _display.drawTextWithTransparentBg("--", 280, 3, COLOR_GRAY_DARK);
         } else {
             String rssiStr = String(rssi);
             char rssiChar[8];
@@ -261,7 +259,7 @@ void TempPage::drawWiFiStatus(bool connected) {
                 wifiColor = COLOR_RED;
             }
 
-            _display.drawTextWithTransparentBgFont(rssiChar, 285, 3, wifiColor, font_small_20);
+            _display.drawTextWithTransparentBg(rssiChar, 285, 3, wifiColor);
         }
     }
 }

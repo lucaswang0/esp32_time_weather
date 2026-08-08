@@ -224,8 +224,7 @@ void HistoryPage::loadFromLittleFS() {
 
 void HistoryPage::drawStatusBar() {
     if (history == nullptr) return;
-    
-    TFT_eSPI& tft = _display.getTFT();
+
     // 背景图透出，不再 fillRect 覆盖整条状态栏
     // 避免 tft.printf：其内部走 vprintf/vsnprintf 在某些 GCC 实现中栈用量 >2K，
     // 与 GCC -fstack-protector 配合易 spurious 检测到 canary 损坏。
@@ -250,12 +249,10 @@ void HistoryPage::drawStatusBar() {
         dtostrf(history[last].pressure, 5, 1, numBuf);
         sprintf(pBuf, "P:%shPa", numBuf);
 
-        // 测量各段宽度以便按段拼接（默认 font_small_20）
-        tft.loadFont(font_small_20);
-        int tW = tft.textWidth(tBuf);
-        int hW = tft.textWidth(hBuf);
-        int pW = tft.textWidth(pBuf);
-        tft.unloadFont();
+        // 测量各段宽度以便按段拼接（xfont 20px）
+        int tW = _display.getXFontTextWidth(tBuf);
+        int hW = _display.getXFontTextWidth(hBuf);
+        int pW = _display.getXFontTextWidth(pBuf);
 
         // 透明背景分段绘制
         int x = 155;
@@ -385,13 +382,9 @@ void HistoryPage::drawBottomBar() {
     _display.drawTextWithTransparentBg(recBuf, 5, 155, COLOR_TEXT);
 
     // 颜色图例：T/H/P 标签（透明背景，按段拼接位置）
-    TFT_eSPI& tft = _display.getTFT();
-    tft.loadFont(font_small_20);
-    int tW = tft.textWidth("T");
-    int hW = tft.textWidth(" H");
-    int x = tft.textWidth(recBuf);
-    tft.unloadFont();
-
+    int tW = _display.getXFontTextWidth("T");
+    int hW = _display.getXFontTextWidth(" H");
+    int x = _display.getXFontTextWidth(recBuf);
 
     x += 10;
     _display.drawTextWithTransparentBg("T", x, 155, COLOR_TEMP);

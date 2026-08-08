@@ -1,7 +1,6 @@
 #include "WiFiInfoPage.h"
 #include <esp_log.h>
 #include <TFT_eSPI.h>
-#include "font_small_20.h"
 #include "DisplayManager.h"
 
 
@@ -39,56 +38,29 @@ void WiFiInfoPage::update() {
 }
 
 void WiFiInfoPage::drawStaticContent(TFT_eSPI& tft) {
-    tft.loadFont(font_small_20);
-    tft.setTextDatum(TL_DATUM);
-    
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString("连接状态:", 5, 5);
-    tft.drawString("WiFi名称:", 5, 30);
-    tft.drawString("IP地址:", 5, 55);
-    tft.drawString("DNS地址:", 5, 80);
-    tft.drawString("信号强度:", 5, 105);
-    tft.drawString("重连次数:", 5, 130);
-    
-    tft.setTextColor(COLOR_GOLD_WARM);
-    tft.drawString("长按10秒进入AP配网", 5, 155);
-    
-    tft.unloadFont();
+    _display.drawTextXFont("连接状态:", 5, 5, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("WiFi名称:", 5, 30, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("IP地址:", 5, 55, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("DNS地址:", 5, 80, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("信号强度:", 5, 105, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("重连次数:", 5, 130, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("长按10秒进入AP配网", 5, 155, COLOR_GOLD_WARM, TL_DATUM);
 }
 
 void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
-    tft.loadFont(font_small_20);
-    tft.setTextDatum(TL_DATUM);
-    
     bool connected = _wifi.isConnected();
-    
-    tft.setTextColor(connected ? TFT_GREEN : TFT_RED);
-    tft.drawString(connected ? "已连接" : "未连接", 120, 5);
-    
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(_wifi.getSSID(), 120, 30);
-    
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(_wifi.getLocalIP(), 120, 55);
-    tft.drawString(_wifi.getdnsIP(), 120, 80);
-    
-    tft.setTextColor(TFT_WHITE);
+
+    _display.drawTextXFont(connected ? "已连接" : "未连接", 120, 5,
+                           connected ? TFT_GREEN : TFT_RED, TL_DATUM);
+    _display.drawTextXFont(_wifi.getSSID(), 120, 30, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont(_wifi.getLocalIP(), 120, 55, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont(_wifi.getdnsIP(), 120, 80, TFT_WHITE, TL_DATUM);
+
     char rssiStr[16];
     snprintf(rssiStr, sizeof(rssiStr), "%d dBm", _wifi.getRSSI());
-    // 获取当前字符串的像素宽度
-    uint16_t strWidth = tft.textWidth(rssiStr);
-    // 清除该区域的旧内容（加一点边距防止边缘残留）
-    // tft.fillRect(120, 105, strWidth + 5, 20, TFT_BLACK);
-    // tft.drawString(rssiStr, 120, 105);
-    tft.unloadFont();
+    _display.drawTextWithTransparentBg(rssiStr, 120, 105, TFT_WHITE);
 
-    _display.drawTextWithTransparentBgFont(rssiStr, 120, 105, TFT_WHITE, font_small_20);
-
-    tft.loadFont(font_small_20);
-    tft.setTextColor(TFT_WHITE);
     char reconnectStr[16];
     snprintf(reconnectStr, sizeof(reconnectStr), "%d", _wifi.getReconnectCount());
-    tft.drawString(reconnectStr, 120, 130);
-    
-    tft.unloadFont();
+    _display.drawTextXFont(reconnectStr, 120, 130, TFT_WHITE, TL_DATUM);
 }

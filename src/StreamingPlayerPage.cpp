@@ -1,5 +1,4 @@
 #include "StreamingPlayerPage.h"
-#include "font_small_20.h"
 #include "DisplayManager.h"
 #include <lwip/sockets.h>
 #include <esp_log.h>
@@ -69,49 +68,29 @@ void StreamingPlayerPage::onExit() {
 void StreamingPlayerPage::drawConnectingScreen() {
     auto& tft = _display.getTFT();
     tft.fillScreen(TFT_BLACK);
-    
-    tft.loadFont(font_small_20);
-    // tft.setTextDatum(TC_DATUM);  // 顶部居中
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString("正在连接流媒体服务器...", 2, 60);
 
-    tft.setTextColor(COLOR_GRAY_DARK);
-    tft.drawString(SERVER_HOST, 160, 95);
+    _display.drawTextXFont("正在连接流媒体服务器...", 2, 60, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont(SERVER_HOST, 160, 95, COLOR_GRAY_DARK, TL_DATUM);
     char portStr[16];
     snprintf(portStr, sizeof(portStr), "端口:%d", SERVER_PORT);
-    tft.drawString(portStr, 160, 115);
-    
-    tft.setTextColor(COLOR_GRAY_MID);
-    tft.drawString("触摸返回", 160, 146);
-    
-    tft.unloadFont();
+    _display.drawTextXFont(portStr, 160, 115, COLOR_GRAY_DARK, TL_DATUM);
+    _display.drawTextXFont("触摸返回", 160, 146, COLOR_GRAY_MID, TL_DATUM);
 }
 
 void StreamingPlayerPage::drawErrorScreen(const char* msg) {
     auto& tft = _display.getTFT();
     tft.fillScreen(TFT_BLACK);
-    
-    tft.loadFont(font_small_20);
-    tft.setTextDatum(TC_DATUM);
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(msg, 160, 70);
-    
-    tft.setTextColor(COLOR_GRAY_MID);
-    tft.drawString("双击重试", 160, 146);
-    
-    tft.unloadFont();
+
+    _display.drawTextXFont(msg, 160, 70, TFT_WHITE, TC_DATUM);
+    _display.drawTextXFont("双击重试", 160, 146, COLOR_GRAY_MID, TC_DATUM);
 }
 
 void StreamingPlayerPage::drawFps() {
     // 在屏幕右上角绘制FPS，黑色半透明背景
     auto& tft = _display.getTFT();
-    tft.loadFont(font_small_20);
     // 背景矩形（黑色，覆盖之前的内容）
     tft.fillRect(320 - 60, 0, 60, 18, TFT_BLACK);
-    tft.setTextDatum(TR_DATUM);
-    tft.setTextColor(TFT_GREEN);
-    tft.drawString(_fpsText, 320 - 2, 2);
-    tft.unloadFont();
+    _display.drawTextXFont(_fpsText, 320 - 2, 2, TFT_GREEN, TR_DATUM);
 }
 
 bool StreamingPlayerPage::connectToServer() {

@@ -64,19 +64,24 @@ void DisplayManager::init() {
     ESP_LOGI(TAG, "Background image loaded successfully (from PROGMEM)");
     
     tft.setTextDatum(TL_DATUM);
-    drawTextWithTransparentBgFont("0000", 0, 10, COLOR_WHITE, font_small_20);
+
+    // 装载 XFont 20px 全字库（/x.font），后续 20px 中文统一走 xfont
+    _xFont = new XFont();
+    _xFont->setTarget(&tft);
+
+    drawTextWithTransparentBg("0000", 0, 10, COLOR_WHITE);
     drawTextWithTransparentBgFont("00:00", 0, 40, COLOR_WHITE, font_large_72);
-    drawTextWithTransparentBgFont("00", 78, 28, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("日出:00:00", 0, 110, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("日落:00:00", 0, 131, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("0000.00.00 周X", 0, 150, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("-00", 285, 3, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("0000", 270, 40, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBg("00", 78, 28, COLOR_WHITE);
+    drawTextWithTransparentBg("日出:00:00", 0, 110, COLOR_WHITE);
+    drawTextWithTransparentBg("日落:00:00", 0, 131, COLOR_WHITE);
+    drawTextWithTransparentBg("0000.00.00 周X", 0, 150, COLOR_WHITE);
+    drawTextWithTransparentBg("-00", 285, 3, COLOR_WHITE);
+    drawTextWithTransparentBg("0000", 270, 40, COLOR_WHITE);
     drawTextWithTransparentBgFont("00° - 00°", 200, 95, COLOR_WHITE, font_medium_32);
-    drawTextWithTransparentBgFont("外:--°", 150, 126, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("内:--°", 150, 150, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("体:--°", 225, 126, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("湿:--%", 225, 150, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBg("外:--°", 150, 126, COLOR_WHITE);
+    drawTextWithTransparentBg("内:--°", 150, 150, COLOR_WHITE);
+    drawTextWithTransparentBg("体:--°", 225, 126, COLOR_WHITE);
+    drawTextWithTransparentBg("湿:--%", 225, 150, COLOR_WHITE);
 
     ESP_LOGI(TAG, "显示屏初始化完成");
 }
@@ -136,25 +141,11 @@ void DisplayManager::fillBlackScreen() {
 void DisplayManager::showConfigMode() {
     tft.fillScreen(COLOR_GRAY_LIGHT);
     tft.fillRoundRect(30, 20, 260, 110, 6, COLOR_CARD);
-    tft.loadFont(font_small_20);
-    tft.setTextColor(COLOR_PRIMARY);
 
-    tft.setCursor(50, 30);
-    tft.print("WiFi Config Mode");
-
-    tft.setCursor(50, 60);
-    tft.setTextColor(COLOR_SUN);
-    tft.print("Connect: ESP32-Weather");
-
-    tft.setCursor(50, 85);
-    tft.setTextColor(COLOR_GRAY_LIGHT);
-    tft.print("pwd: 12345678");
-
-    tft.setCursor(50, 110);
-    tft.setTextColor(COLOR_GRAY_MID);
-    tft.print("Browser: 192.168.4.1");
-
-    tft.unloadFont();
+    drawTextXFont("WiFi Config Mode", 50, 30, COLOR_PRIMARY, TL_DATUM);
+    drawTextXFont("Connect: ESP32-Weather", 50, 60, COLOR_SUN, TL_DATUM);
+    drawTextXFont("pwd: 12345678", 50, 85, COLOR_GRAY_LIGHT, TL_DATUM);
+    drawTextXFont("Browser: 192.168.4.1", 50, 110, COLOR_GRAY_MID, TL_DATUM);
 }
 
 void DisplayManager::fadeOut(int durationMs) {
@@ -177,7 +168,7 @@ void DisplayManager::fadeIn(int durationMs) {
 }
 
 void DisplayManager::drawTextWithBg(const char* text, int x, int y, uint16_t color) {
-    drawTextWithBgFont(text, x, y, color, font_small_20);
+    drawTextXFontBg(text, x, y, color, COLOR_AUTO_FILL);
 }
 
 void DisplayManager::drawTextWithBgFont(const char* text, int x, int y, uint16_t color, const uint8_t* font) {
@@ -185,7 +176,7 @@ void DisplayManager::drawTextWithBgFont(const char* text, int x, int y, uint16_t
 }
 
 void DisplayManager::drawTextWithTransparentBg(const char* text, int x, int y, uint16_t color) {
-    drawTextWithBgMode(text, x, y, color, font_small_20, COLOR_TRANSPARENT);
+    drawTextXFontBg(text, x, y, color, COLOR_TRANSPARENT);
 }
 
 void DisplayManager::drawTextWithTransparentBgFont(const char* text, int x, int y, uint16_t color, const uint8_t* font) {
@@ -264,6 +255,99 @@ void DisplayManager::drawTextWithBgMode(const char* text, int x, int y, uint16_t
 
     spr.pushSprite(bgX, bgY);
     spr.deleteSprite();
+}
+
+DisplayManager::~DisplayManager() {
+    if (_xFont) {
+        _xFont->clear();
+        delete _xFont;
+        _xFont = nullptr;
+    }
+}
+
+// 20px xfont 画布合成版：背景合成逻辑与 drawTextWithBgMode 一致，
+// 文本绘制段改用 _xFont->DrawChinese（透明模式只画前景像素，sprite 背景完整保留）
+void DisplayManager::drawTextXFontBg(const char* text, int x, int y, uint16_t color, uint16_t bgColor) {
+    if (!_xFont || !_xFont->isInit) return;
+
+    int w = _xFont->textWidth(String(text));
+    int h = _xFont->font_size;
+    if (w <= 0 || h <= 0) return;
+
+    TFT_eSprite spr = TFT_eSprite(&tft);
+    spr.createSprite(w, h);
+
+    int bgX = x;
+    int bgY = y;
+
+    if (bgColor == COLOR_TRANSPARENT) {
+        if (bgSource != nullptr) {
+            int readW = w;
+            int readH = h;
+            int readX = bgX;
+            int readY = bgY;
+            if (readX < 0) { readW += readX; readX = 0; }
+            if (readY < 0) { readH += readY; readY = 0; }
+            if (readX + readW > SCREEN_WIDTH) readW = SCREEN_WIDTH - readX;
+            if (readY + readH > SCREEN_HEIGHT) readH = SCREEN_HEIGHT - readY;
+            if (readW > 0 && readH > 0) {
+                spr.fillSprite(0x0001);
+                for (int row = 0; row < readH; row++) {
+                    int dstY = (readY - bgY) + row;
+                    int dstX = readX - bgX;
+                    if (dstY >= 0 && dstY < h && dstX >= 0 && dstX + readW <= w) {
+                        uint16_t* dstPtr = (uint16_t*)spr.getPointer() + dstY * w + dstX;
+                        const uint16_t* srcPtr = &bgSource[(readY + row) * SCREEN_WIDTH + readX];
+                        for (int col = 0; col < readW; col++) {
+                            dstPtr[col] = __builtin_bswap16(srcPtr[col]);
+                        }
+                    }
+                }
+            } else {
+                spr.fillSprite(0x0001);
+            }
+        } else {
+            spr.fillSprite(0x8410);
+        }
+    } else if (bgColor == COLOR_AUTO_FILL) {
+        int readX = bgX;
+        int readY = bgY;
+        int readW = w;
+        int readH = h;
+        if (bgX < 0) { readW += bgX; readX = 0; }
+        if (bgY < 0) { readH += bgY; readY = 0; }
+        if (readX + readW > SCREEN_WIDTH) readW = SCREEN_WIDTH - readX;
+        if (readY + readH > SCREEN_HEIGHT) readH = SCREEN_HEIGHT - readY;
+        if (readW > 0 && readH > 0) {
+            tft.readRect(readX, readY, readW, readH, (uint16_t*)spr.getPointer());
+        } else {
+            spr.fillSprite(0x0001);
+        }
+    } else {
+        spr.fillSprite(bgColor);
+    }
+
+    // 透明绘制：只画前景像素，sprite 已合成的背景完整保留
+    _xFont->setTarget(&spr);
+    _xFont->DrawChinese(0, 0, String(text), color);
+    _xFont->setTarget(&tft);
+
+    spr.pushSprite(bgX, bgY);
+    spr.deleteSprite();
+}
+
+int DisplayManager::getXFontTextWidth(const char* text) {
+    return _xFont ? _xFont->textWidth(String(text)) : 0;
+}
+
+// datum 对齐：TL=左上角原点；TC=x 为水平中心；TR=x 为右边缘；其余按 TL
+void DisplayManager::drawTextXFont(const char* text, int x, int y, uint16_t color, int datum) {
+    if (!_xFont || !_xFont->isInit) return;
+    int w = _xFont->textWidth(String(text));
+    int ox = x;
+    if (datum == TC_DATUM) ox = x - w / 2;
+    else if (datum == TR_DATUM) ox = x - w;
+    _xFont->DrawChinese(ox, y, String(text), color);
 }
 
 void* pngOpen(const char *filename, int32_t *size) {

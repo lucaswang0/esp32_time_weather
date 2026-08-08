@@ -4,7 +4,6 @@
 #include "WeatherManager.h"
 #include "TimeManager.h"
 #include "WiFiManager.h"
-#include "font_small_20.h"
 
 static const char* TAG = "ForecastPage";
 ForecastPage::ForecastPage(DisplayManager& disp, WeatherManager& weather,
@@ -62,31 +61,25 @@ void ForecastPage::draw3DayForecast(const DailyForecast& day0, const DailyForeca
 
 void ForecastPage::drawHeader() {
     TFT_eSPI& tft = _display.getTFT();
-    tft.loadFont(font_small_20);
 
     // 左侧：城市名
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextColor(TFT_WHITE);
     String city = _weather.getCity();
-    tft.drawString(city.length() > 0 ? ("[" + city + "]") : "[--]", 4, 4);
+    String cityLabel = city.length() > 0 ? ("[" + city + "]") : String("[--]");
+    _display.drawTextXFont(cityLabel.c_str(), 4, 4, TFT_WHITE, TL_DATUM);
 
     // 右侧：HH:MM 更新（_time 未同步时显示 --:--）
-    tft.setTextDatum(TR_DATUM);
     int year = _time.getYear();
     if (year > 2020) {
-        char timeStr[8];
+        char timeStr[16];
         snprintf(timeStr, sizeof(timeStr), "%02d:%02d 更新", _time.getHour(), _time.getMinute());
-        tft.drawString(timeStr, 316, 4);
+        _display.drawTextXFont(timeStr, 316, 4, TFT_WHITE, TR_DATUM);
     } else {
-        tft.drawString("--:-- 更新", 316, 4);
+        _display.drawTextXFont("--:-- 更新", 316, 4, TFT_WHITE, TR_DATUM);
     }
-
-    tft.unloadFont();
 }
 
 void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day) {
     TFT_eSPI& tft = _display.getTFT();
-    tft.loadFont(font_small_20);
 
     // 卡片上/下边框（细线）
     tft.drawFastHLine(x, y, w, TFT_DARKGREY);
@@ -96,14 +89,11 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
 
     // 行 1 (y=24): 日期 "07-25"（取 fxDate 后 5 位）
     String dateText = day.date.length() >= 10 ? day.date.substring(5) : "--";
-    tft.setTextDatum(TC_DATUM);
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(dateText, centerX, y + 4);
+    _display.drawTextXFont(dateText.c_str(), centerX, y + 4, TFT_WHITE, TC_DATUM);
 
     // 行 2 (y=46): 天气文字
     String weatherText = day.textDay.length() > 0 ? day.textDay : "--";
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(weatherText, centerX, y + 24);
+    _display.drawTextXFont(weatherText.c_str(), centerX, y + 24, TFT_WHITE, TC_DATUM);
 
     // 行 3 (y=68): 温度 "22°/30°" — 用项目自定义的 COLOR_GOLD_WARM 暖金色
     String tempText;
@@ -112,15 +102,13 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
     } else {
         tempText = "--°/--°";
     }
-    tft.setTextColor(COLOR_GOLD_WARM);
-    tft.drawString(tempText, centerX, y + 46);
+    _display.drawTextXFont(tempText.c_str(), centerX, y + 46, COLOR_GOLD_WARM, TC_DATUM);
 
     // 行 4 (y=90): 湿度 "湿80%"
     String humText = day.humidity.length() > 0
         ? ("湿" + day.humidity + "%")
         : "湿--%";
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(humText, centerX, y + 68);
+    _display.drawTextXFont(humText.c_str(), centerX, y + 68, TFT_WHITE, TC_DATUM);
 
     // 行 5 (y=112): 风向 "东北风"
     String windDirText;
@@ -129,8 +117,7 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
     } else {
         windDirText = "--风";
     }
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(windDirText, centerX, y + 90);
+    _display.drawTextXFont(windDirText.c_str(), centerX, y + 90, TFT_WHITE, TC_DATUM);
 
     // 行 6 (y=134): 风力等级 "1-3级"
     String windScaleText;
@@ -139,7 +126,5 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
     } else {
         windScaleText = "--级";
     }
-    tft.drawString(windScaleText, centerX, y + 112);
-
-    tft.unloadFont();
+    _display.drawTextXFont(windScaleText.c_str(), centerX, y + 112, TFT_WHITE, TC_DATUM);
 }

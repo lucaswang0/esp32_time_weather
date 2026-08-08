@@ -160,7 +160,7 @@ void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
     fs::File file = LittleFS.open(filename, FILE_READ);
     if (!file) {
         // 透明背景绘制"无数据"
-        _display.drawTextWithTransparentBgFont("无数据", x + w/2 - 30, y + h/2 - 4, COLOR_WHITE, font_small_20);
+        _display.drawTextWithTransparentBg("无数据", x + w/2 - 30, y + h/2 - 4, COLOR_WHITE);
         return;
     }
 
@@ -183,7 +183,7 @@ void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
     if (fileCount < 2) {
         file.close();
         // 透明背景绘制"数据不足"
-        _display.drawTextWithTransparentBgFont("数据不足", x + w/2 - 30, y + h/2 - 4, COLOR_WHITE, font_small_20);
+        _display.drawTextWithTransparentBg("数据不足", x + w/2 - 30, y + h/2 - 4, COLOR_WHITE);
         return;
     }
 
@@ -221,23 +221,23 @@ void PressurePage::drawPressureGraph(int x, int y, int w, int h) {
     // 角落显示 min/max（透明背景绘制）
     char label[12];
     sprintf(label, "%.0f", pmax);
-    _display.drawTextWithTransparentBgFont(label, x + 4, y + 2, COLOR_SUN, font_small_20);
+    _display.drawTextWithTransparentBg(label, x + 4, y + 2, COLOR_SUN);
     sprintf(label, "%.0f", pmin);
-    _display.drawTextWithTransparentBgFont(label, x + 4, y + h - 10, COLOR_SUN, font_small_20);
+    _display.drawTextWithTransparentBg(label, x + 4, y + h - 10, COLOR_SUN);
 }
 
 void PressurePage::drawPage() {
     TFT_eSPI& tft = _display.getTFT();
 
     // 标题栏：白色文字（背景图透出，不再 fillRect 覆盖整屏）
-    _display.drawTextWithTransparentBgFont("气压监测", 8, 6, COLOR_WHITE, font_small_20);
+    _display.drawTextWithTransparentBg("气压监测", 8, 6, COLOR_WHITE);
 
     // 右下角更新时间
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
     char time_str[16];
     strftime(time_str, sizeof(time_str), "%H:%M", tm_info);
-    _display.drawTextWithTransparentBgFont(time_str, 270, 6, COLOR_WHITE, font_small_20);
+    _display.drawTextWithTransparentBg(time_str, 270, 6, COLOR_WHITE);
 
     // 标题下方分隔线
     tft.drawFastHLine(0, 18, 320, TFT_RED);

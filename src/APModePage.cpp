@@ -1,7 +1,6 @@
 #include "APModePage.h"
 #include <esp_log.h>
 #include "config.h"
-#include "font_small_20.h"
 
 static const char* TAG = "APModePage";
 APModePage::APModePage(DisplayManager& display, WiFiManager& wifi)
@@ -54,55 +53,31 @@ void APModePage::update() {
 
 void APModePage::drawStaticContent(TFT_eSPI& tft) {
     tft.fillScreen(TFT_BLACK);
-    
-    tft.loadFont(font_small_20);
-    
-    tft.setTextDatum(TC_DATUM);
-    tft.setTextColor(TFT_GREEN);
-    tft.drawString("AP配网", 160, 8);
-    
-    tft.setTextDatum(TR_DATUM);
-    tft.setTextColor(TFT_YELLOW);
-    tft.drawString("10:00", 315, 8);
-    
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString("1. 连接 WiFi: ESP32-Weather", 5, 32);
-    tft.drawString("2. 浏览器访问:", 5, 56);
-    
-    tft.setTextColor(TFT_CYAN);
-    tft.drawString("http://192.168.4.1", 5 + tft.textWidth("2. 浏览器访问:"), 56);
-    
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString("3. 选择WiFi并输入密码", 5, 80);
-    tft.drawString("4. 保存后设备将重启", 5, 104);
-    
-    tft.setTextColor(TFT_CYAN);
-    tft.drawString("也使用EspTouch工具配置", 5, 128);
 
-    tft.setTextColor(TFT_ORANGE);
-    tft.drawString("未配置则倒计时结束后返回", 5, 152);
-    
-    tft.unloadFont();
+    _display.drawTextXFont("AP配网", 160, 8, TFT_GREEN, TC_DATUM);
+    _display.drawTextXFont("10:00", 315, 8, TFT_YELLOW, TR_DATUM);
+    _display.drawTextXFont("1. 连接 WiFi: ESP32-Weather", 5, 32, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("2. 浏览器访问:", 5, 56, TFT_WHITE, TL_DATUM);
+
+    int offsetX = _display.getXFontTextWidth("2. 浏览器访问:");
+    _display.drawTextXFont("http://192.168.4.1", 5 + offsetX, 56, TFT_CYAN, TL_DATUM);
+
+    _display.drawTextXFont("3. 选择WiFi并输入密码", 5, 80, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("4. 保存后设备将重启", 5, 104, TFT_WHITE, TL_DATUM);
+    _display.drawTextXFont("也使用EspTouch工具配置", 5, 128, TFT_CYAN, TL_DATUM);
+    _display.drawTextXFont("未配置则倒计时结束后返回", 5, 152, TFT_ORANGE, TL_DATUM);
 }
 
 void APModePage::updateCountdown(TFT_eSPI& tft) {
     int remaining = getRemainingSeconds();
     int minutes = remaining / 60;
     int seconds = remaining % 60;
-    
+
     char timeStr[32];
     snprintf(timeStr, sizeof(timeStr), "%02d:%02d", minutes, seconds);
-    
-    tft.loadFont(font_small_20);
-    tft.setTextDatum(TR_DATUM);
-    
+
     tft.fillRect(240, 0, 80, 24, TFT_BLACK);
-    
-    tft.setTextColor(TFT_YELLOW);
-    tft.drawString(timeStr, 315, 8);
-    
-    tft.unloadFont();
+    _display.drawTextXFont(timeStr, 315, 8, TFT_YELLOW, TR_DATUM);
 }
 
 int APModePage::getRemainingSeconds() {
