@@ -41,7 +41,7 @@ void DisplayManager::init() {
     if (lastBgDay > 0) {
         int today = lastBgDay;
         randomSeed(today);
-        currentBgIndex = random(1, 6);
+        currentBgIndex = random(1, 4);
         ESP_LOGI(TAG, "Time synced, selecting background for day %d: bg%d", today, currentBgIndex);
     } else {
         currentBgIndex = 1;
@@ -95,7 +95,7 @@ void DisplayManager::clearScreen() {
     if (today > 0 && today != lastBgDay) {
         lastBgDay = today;
         randomSeed(today);
-        currentBgIndex = random(1, 10);
+        currentBgIndex = random(1, 4);
         bgSource = getBackgroundByIndex(currentBgIndex);
         ESP_LOGI(TAG, "Day changed (%d), selecting new background: bg%d", today, currentBgIndex);
     }
