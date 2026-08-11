@@ -102,7 +102,7 @@ void TempPage::drawTime(int year, int month, int day, int hour, int minute, int 
         char dateStr[20];
         sprintf(dateStr, "%04d.%02d.%02d %s", year, month, day, weekdays[weekday]);
         ESP_LOGI(TAG, "DATE draw at 0,150 = %s", dateStr);
-        _display.drawTextWithTransparentBgFont(dateStr, 0, 150, COLOR_WHITE, font_small_20);
+        _display.drawTextWithTransparentBgFont(dateStr, 0, 106, COLOR_WHITE, font_small_20);
     }
 }
 
@@ -146,7 +146,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         lastTemp = temp;
         
         String tempStr = "外:" + (temp.length() > 0 ? temp : "--");
-        _display.drawTextWithTransparentBg(tempStr.c_str(), 150, 126, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(tempStr.c_str(), 150, 130, COLOR_WHITE);
     }
 }
 
@@ -173,17 +173,17 @@ void TempPage::drawSunMoon(const String& sunrise, const String& sunset, const St
     lastMoonPhaseIcon = moonPhaseIcon;
 
     String sunStr = sunrise.length() > 0 ? ("日出:" + sunrise) : "日出--";
-    _display.drawTextWithTransparentBg(sunStr.c_str(), 0, 105, COLOR_WHITE);
+    _display.drawTextWithTransparentBg(sunStr.c_str(), 0, 130, COLOR_WHITE);
 
     String moonStr = sunset.length() > 0 ? ("日落:" + sunset) : "日落--";
-    _display.drawTextWithTransparentBg(moonStr.c_str(), 0, 126, COLOR_WHITE);
+    _display.drawTextWithTransparentBg(moonStr.c_str(), 0, 150, COLOR_WHITE);
 
     // 月相图标：日出日落右边，与"日出"行垂直居中
     if (moonPhaseIcon.length() > 0) {
         // 复用 drawWeatherIcon 全部默认参数：/icon_<code>.png，失败回退 /icon_999.png
         // 32×32 图标（与 weather icon 64×64 区分），位置 (95, 100)
         // 实际区域 95-127 / 100-132，不与 (0,105) 日出文字、(0,126) 日落文字、(225,126) 体感温度冲突
-        _display.drawWeatherIcon(98, 105, moonPhaseIcon);
+        _display.drawWeatherIcon(97, 122, moonPhaseIcon);
     }
 }
 
@@ -300,5 +300,5 @@ void TempPage::drawApparentTemp(float apparentTemp, float humidity) {
     
     char tempStr[32];
     sprintf(tempStr, "体:%.1f°%s", apparentTemp, comfort);
-    _display.drawTextWithTransparentBg(tempStr, 225, 126, COLOR_WHITE);
+    _display.drawTextWithTransparentBg(tempStr, 225, 130, COLOR_WHITE);
 }

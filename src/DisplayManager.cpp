@@ -64,19 +64,21 @@ void DisplayManager::init() {
     ESP_LOGI(TAG, "Background image loaded successfully (from PROGMEM)");
     
     tft.setTextDatum(TL_DATUM);
-    drawTextWithTransparentBgFont("0000", 0, 10, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("00:00", 0, 40, COLOR_WHITE, font_large_72);
-    drawTextWithTransparentBgFont("00", 78, 28, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("日出:00:00", 0, 110, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("日落:00:00", 0, 131, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("0000.00.00 周X", 0, 150, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("-00", 285, 3, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("0000", 270, 40, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("00° - 00°", 200, 95, COLOR_WHITE, font_medium_32);
-    drawTextWithTransparentBgFont("外:--°", 150, 126, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("内:--°", 150, 150, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("体:--°", 225, 126, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("湿:--%", 225, 150, COLOR_WHITE, font_small_20);
+    // 左边区域
+    drawTextWithTransparentBgFont("City", 0, 10, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("12:23", 0, 40, COLOR_WHITE, font_large_72);
+    drawTextWithTransparentBgFont("56", 78, 28, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("1999.11.22 周日", 0, 106, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("日出:12:34", 0, 130, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("日落:23:45", 0, 150, COLOR_WHITE, font_small_20);
+    // 右边区域
+    drawTextWithTransparentBgFont("-88", 285, 3, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("风雨", 270, 40, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("11° - 22°", 200, 95, COLOR_WHITE, font_medium_32);
+    drawTextWithTransparentBgFont("外:18°", 150, 130, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("内:28°", 150, 150, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("体:18°", 225, 130, COLOR_WHITE, font_small_20);
+    drawTextWithTransparentBgFont("湿:88%", 225, 150, COLOR_WHITE, font_small_20);
 
     ESP_LOGI(TAG, "显示屏初始化完成");
 }

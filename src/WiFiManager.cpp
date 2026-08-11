@@ -721,23 +721,37 @@ bool WiFiManager::isSmartConfigDone() {
 }
 
 void WiFiManager::handleSmartConfig() {
- if (!smartConfigStarted) return;
+	if (!smartConfigStarted) return;
 
- if (WiFi.smartConfigDone()) {
-  ESP_LOGI(TAG, "[SmartConfig] SmartConfig received!");
-  smartConfigDone = true;
+	if (WiFi.smartConfigDone()) {
+		ESP_LOGI(TAG, "[SmartConfig] SmartConfig received!");
+		smartConfigDone = true;
 
-  String ssid = WiFi.SSID();
-  String password = WiFi.psk();
-  ESP_LOGI(TAG, "[SmartConfig] SSID: %s", ssid.c_str());
+		String ssid, password;
+		int retry = 0;
+		while (retry < 10) {
+			ssid = WiFi.SSID();
+			password = WiFi.psk();
+			if (ssid.length() > 0 && password.length() > 0) break;
+			delay(50);
+			retry++;
+		}
 
-  saveCredentials(ssid, password);
- }
+		ESP_LOGI(TAG, "[SmartConfig] Received SSID: %s, password length: %d", ssid.c_str(), password.length());
 
- if (smartConfigStartTime > 0 && (millis() - smartConfigStartTime) >= SMART_CONFIG_TIMEOUT_MS) {
-  ESP_LOGI(TAG, "[SmartConfig] Timeout (2 minutes), stopping SmartConfig...");
-  stopSmartConfig();
- }
+		if (ssid.length() > 0) {
+			ESP_LOGI(TAG, "[SmartConfig] Saving credentials to NVS...");
+			saveCredentials(ssid, password);
+			ESP_LOGI(TAG, "[SmartConfig] Credentials saved successfully, SSID: %s", ssid.c_str());
+		} else {
+			ESP_LOGW(TAG, "[SmartConfig] Failed to get valid SSID after retries, not saving");
+		}
+	}
+
+	if (smartConfigStartTime > 0 && (millis() - smartConfigStartTime) >= SMART_CONFIG_TIMEOUT_MS) {
+		ESP_LOGI(TAG, "[SmartConfig] Timeout (2 minutes), stopping SmartConfig...");
+		stopSmartConfig();
+	}
 }
 
 String WiFiManager::sizeStr(uint64_t bytes) {
