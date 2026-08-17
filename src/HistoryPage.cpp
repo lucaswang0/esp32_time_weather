@@ -258,12 +258,12 @@ void HistoryPage::drawStatusBar() {
         tft.unloadFont();
 
         // 透明背景分段绘制
-        int x = 155;
+        int x = 160;
         _display.drawTextWithTransparentBg(tBuf, x, 10, COLOR_TEMP);
         x += tW;
         _display.drawTextWithTransparentBg(hBuf, x, 10, COLOR_HUMI);
         x += hW;
-        _display.drawTextWithTransparentBg(pBuf, x, 10, COLOR_PRESS);
+        _display.drawTextWithTransparentBg(pBuf, 200, 155, COLOR_PRESS);
     }
 }
 
@@ -381,24 +381,8 @@ void HistoryPage::drawBottomBar() {
     // 背景图透出，不再 fillRect 覆盖整条底栏
     // 记录数文本：透明背景
     char recBuf[32];
-    sprintf(recBuf, "Record: %d  Interval: 10m", historyCount);
+    sprintf(recBuf, "记录: %d  间隔: 10Min", historyCount);
     _display.drawTextWithTransparentBg(recBuf, 5, 155, COLOR_TEXT);
-
-    // 颜色图例：T/H/P 标签（透明背景，按段拼接位置）
-    TFT_eSPI& tft = _display.getTFT();
-    tft.loadFont(font_small_20);
-    int tW = tft.textWidth("T");
-    int hW = tft.textWidth(" H");
-    int x = tft.textWidth(recBuf);
-    tft.unloadFont();
-
-
-    x += 10;
-    _display.drawTextWithTransparentBg("T", x, 155, COLOR_TEMP);
-    x += tW;
-    _display.drawTextWithTransparentBg(" H", x, 155, COLOR_HUMI);
-    x += hW;
-    _display.drawTextWithTransparentBg(" P", x, 155, COLOR_PRESS);
 }
 
 void HistoryPage::checkAndCleanOldFiles() {

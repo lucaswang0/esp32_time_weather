@@ -74,7 +74,7 @@ void DisplayManager::init() {
     // 右边区域
     drawTextWithTransparentBgFont("-88", 285, 3, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("风雨", 270, 40, COLOR_WHITE, font_small_20);
-    drawTextWithTransparentBgFont("11° - 22°", 200, 95, COLOR_WHITE, font_medium_32);
+    drawTextWithTransparentBgFont("11° - 22°", 190, 95, COLOR_WHITE, font_medium_32);
     drawTextWithTransparentBgFont("外:18°", 150, 130, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("内:28°", 150, 150, COLOR_WHITE, font_small_20);
     drawTextWithTransparentBgFont("体:18°", 225, 130, COLOR_WHITE, font_small_20);

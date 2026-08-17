@@ -121,7 +121,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         lastForecastValid = forecastValid;
         
         String weatherStr = weather.length() > 0 ? weather : "--";
-        _display.drawTextWithTransparentBg(weatherStr.c_str(), 270, 40, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(weatherStr.c_str(), 265, 60, COLOR_WHITE);
         
         TFT_eSPI& tft = _display.getTFT();
         tft.loadFont(font_small_20);
@@ -129,7 +129,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         int weatherHeight = tft.fontHeight();
         tft.unloadFont();
         
-        int circleX = 270 + weatherWidth + 6;
+        int circleX = 265 + weatherWidth + 6;
         int circleY = 40 + weatherHeight / 2;
         uint16_t circleColor = forecastValid ? COLOR_GREEN : COLOR_GOLD_WARM;
         tft.fillCircle(circleX, circleY, 5, circleColor);
@@ -158,10 +158,16 @@ void TempPage::drawForecast(const String& tempMin, const String& tempMax, const 
     lastForecastTempMax = tempMax;
     lastForecastWeatherCode = weatherCode;
     
-    String forecastStrMin = tempMin + "°" + "- ";
-    String forecastStrMax = tempMax + "°";
-    String forecastStr = forecastStrMin + forecastStrMax;
-    _display.drawTextWithTransparentBgFont(forecastStr.c_str(), 200, 95, COLOR_WHITE, font_medium_32);
+    float minVal = tempMin.toFloat();
+    float maxVal = tempMax.toFloat();
+    
+    char minStr[10], maxStr[10];
+    dtostrf(minVal, 0, 0, minStr);  // 宽度自动，保留1位小数
+    dtostrf(maxVal, 0, 0, maxStr);
+    
+    String forecastStr = String(minStr) + "° - " + String(maxStr) + "°";
+    
+    _display.drawTextWithTransparentBgFont(forecastStr.c_str(), 190, 95, COLOR_WHITE, font_medium_32);
 }
 
 void TempPage::drawSunMoon(const String& sunrise, const String& sunset, const String& moonPhaseIcon) {

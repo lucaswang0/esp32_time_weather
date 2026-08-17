@@ -7,6 +7,29 @@
 #include "font_small_20.h"
 
 static const char* TAG = "ForecastPage";
+
+// 风向代码 → 中文描述映射（根据风向方位.md）
+static String mapWindDir(const String& code) {
+    if (code == "n")      return "北";
+    if (code == "nne")    return "东北偏北";
+    if (code == "ne")     return "东北";
+    if (code == "ene")    return "东北偏东";
+    if (code == "e")      return "东";
+    if (code == "ese")    return "东南偏东";
+    if (code == "se")     return "东南";
+    if (code == "sse")    return "东南偏南";
+    if (code == "s")      return "南";
+    if (code == "ssw")    return "西南偏南";
+    if (code == "sw")     return "西南";
+    if (code == "wsw")    return "西南偏西";
+    if (code == "w")      return "西";
+    if (code == "wnw")    return "西北偏西";
+    if (code == "nw")     return "西北";
+    if (code == "nnw")    return "西北偏北";
+    if (code == "none")   return "无持续风向";
+    if (code == "vrb")    return "风向变化不定";
+    return "";  // 未知代码返回空，后续显示 --
+}
 ForecastPage::ForecastPage(DisplayManager& disp, WeatherManager& weather,
                            TimeManager& time, WiFiManager& wifi)
     : _display(disp), _weather(weather), _time(time), _wifi(wifi) {}
@@ -108,29 +131,42 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
     // 行 3 (y=68): 温度 "22°/30°" — 用项目自定义的 COLOR_GOLD_WARM 暖金色
     String tempText;
     if (day.tempMin.length() > 0 && day.tempMax.length() > 0) {
-        tempText = day.tempMin + "°/" + day.tempMax + "°";
+        tempText = day.tempMin + "°";
     } else {
         tempText = "--°/--°";
     }
     tft.setTextColor(COLOR_GOLD_WARM);
-    tft.drawString(tempText, centerX, y + 46);
+    tft.drawString(tempText, centerX, y + 44);
+
+    if (day.tempMin.length() > 0 && day.tempMax.length() > 0) {
+        tempText = day.tempMax + "°";
+    } else {
+        tempText = "--°/--°";
+    }
+    tft.setTextColor(COLOR_GOLD_WARM);
+    tft.drawString(tempText, centerX, y + 68);    
 
     // 行 4 (y=90): 湿度 "湿80%"
     String humText = day.humidity.length() > 0
         ? ("湿" + day.humidity + "%")
         : "湿--%";
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(humText, centerX, y + 68);
+    tft.drawString(humText, centerX, y + 90);
 
-    // 行 5 (y=112): 风向 "东北风"
+    // 行 5 (y=112): 风向（方位代码 → 中文描述 + "风"）
     String windDirText;
     if (day.windDir.length() > 0) {
-        windDirText = day.windDir + "风";
+        String dirName = mapWindDir(day.windDir);
+        if (dirName.length() > 0) {
+            windDirText = dirName + "风";
+        } else {
+            windDirText = "--风";
+        }
     } else {
         windDirText = "--风";
     }
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(windDirText, centerX, y + 90);
+    tft.drawString(windDirText, centerX, y + 112);
 
     // 行 6 (y=134): 风力等级 "1-3级"
     String windScaleText;
@@ -139,7 +175,7 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
     } else {
         windScaleText = "--级";
     }
-    tft.drawString(windScaleText, centerX, y + 112);
+    tft.drawString(windScaleText, centerX, y + 132);
 
     tft.unloadFont();
 }
