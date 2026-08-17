@@ -20,10 +20,15 @@ def process_configs(raw_config):
     Includes conversion of color lists to tuples in various places.
     """
     default_pipeline_settings = raw_config.get('default_pipeline_settings', {})
+    shared_settings = raw_config.get('shared', {})
     processed_pipelines_list = []
 
     for p_conf_override in raw_config.get('pipelines', []):
         final_pipeline_conf = deepcopy(default_pipeline_settings)
+
+        # 先合并 shared 中的共享配置（如 esp32_host）
+        for key, value in shared_settings.items():
+            final_pipeline_conf[key] = value
 
         for key, value in p_conf_override.items():
             if isinstance(value, dict) and key in final_pipeline_conf and isinstance(final_pipeline_conf[key], dict):
@@ -33,7 +38,7 @@ def process_configs(raw_config):
             else:
                 final_pipeline_conf[key] = value
 
-        required_keys = ['name', 'esp32_port', 'target_width', 'target_height', 'image_source_mode']
+        required_keys = ['name', 'esp32_host', 'esp32_port', 'target_width', 'target_height', 'image_source_mode']
         pipeline_name_for_error = final_pipeline_conf.get('name', str(p_conf_override))
         for key in required_keys:
             if key not in final_pipeline_conf:

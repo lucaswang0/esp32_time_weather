@@ -24,11 +24,24 @@ default_pipeline_settings:
   # === 心跳保活（窗口静止时保持连接） ===
   heartbeat_interval_sec: 2.0           # 心跳包发送间隔（秒）
 
+  # === 客户端重连设置 ===
+  reconnect_interval_sec: 3.0           # 连接失败后重试间隔（秒）
+
+
+# === 连接配置（ESP32 服务端地址，所有 pipeline 共享） ===
+shared:
+  enable_discover: false  # 禁用网段扫描，优先使用配置IP或广播IP
+  use_broadcast: true
+  broadcast_port: 8889
+  broadcast_hold_time: 30
+  broadcast_interval: 2
+  esp32_host: 10.45.1.19  # 强制配置项
+  esp32_port: 8888
 
 # === 管道配置列表 ===
 pipelines:
   - name: "WindowCap_Dashboard_ESP32"
-    esp32_port: 8888                    # ESP32连接端口
+    esp32_port: 8888                    # ESP32 监听端口
     target_width: 320                   # 目标屏幕宽度（像素）
     target_height: 170                  # 目标屏幕高度（像素）
     image_source_mode: "WINDOW_CAPTURE" # 图像源模式：WINDOW_CAPTURE（窗口捕获）或 SCREEN_CAPTURE（屏幕捕获）

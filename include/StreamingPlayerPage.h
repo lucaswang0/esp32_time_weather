@@ -4,6 +4,11 @@
 #include "PageBase.h"
 #include "DisplayManager.h"
 #include <WiFi.h>
+#include <WiFiUdp.h>
+
+#define SERVER_PORT 8888
+#define BROADCAST_PORT 8889              // PC 监听广播的 UDP 端口
+#define BROADCAST_INTERVAL_MS 2000       // 广播间隔（毫秒）
 
 class StreamingPlayerPage : public PageBase {
 public:
@@ -22,15 +27,19 @@ private:
     static const int MAX_CHUNK_SIZE = 8192;
     static const int BUFFER_SIZE = HEADER_SIZE + MAX_CHUNK_SIZE;
     
-    enum State { ST_CONNECTING, ST_PLAYING, ST_ERROR };
-    State _state = ST_CONNECTING;
+    enum State { ST_LISTENING, ST_CONNECTED, ST_PLAYING, ST_ERROR };
+    State _state = ST_LISTENING;
     
+    WiFiServer _tcpServer;
     WiFiClient _tcpClient;
+    WiFiUDP _udp;                         // UDP 广播实例
+    unsigned long _lastBroadcastT = 0;    // 上次广播时间戳
     uint8_t* _rawBuf = nullptr;
     int _rdPhase = 0;
     int _rdPos = 0;
     unsigned long _lastFrameT = 0;
     unsigned long _lastConnectAttempt = 0;
+    unsigned long _lastClientDisconnectT = 0;
     int _connectionFailureCount = 0;
     const int MAX_CONNECTION_FAILURES = 999999;
     
@@ -46,10 +55,12 @@ private:
     float _currentFps = 0.0f;
     char _fpsText[16];
 
-    bool connectToServer();
+    bool listenForClient();
     void drawConnectingScreen();
     void drawErrorScreen(const char* msg);
-    void drawFps();  // 绘制FPS
+    void drawFps();
+    void sendBroadcast();        // 发送 UDP 广播包（仅在未连接时调用）
+    void stopBroadcast();        // 停止广播（连接成功后停止）
 };
 
 #endif

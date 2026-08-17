@@ -46,14 +46,6 @@ __pycache__/
 .Python
 
 # ====================
-# Python-ESP32-TFT-Stream
-# ====================
-Python-ESP32-TFT-Stream/.vscode/
-Python-ESP32-TFT-Stream/__pycache__/
-Python-ESP32-TFT-Stream/*.pyc
-Python-ESP32-TFT-Stream/*.pyo
-
-# ====================
 # 编辑器/系统文件
 # ====================
 .DS_Store

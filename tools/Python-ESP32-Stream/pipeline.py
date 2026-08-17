@@ -58,6 +58,11 @@ class StreamPipeline:
         self._current_dynamic_threshold = self.config.get('min_dirty_rect_threshold', 10)
         self._frame_processing_times_history = deque(maxlen=self.config.get('fps_history_size', 10))
 
+        # 广播发现相关
+        self._last_broadcast_ip = None
+        self._last_broadcast_time = 0
+        self._broadcast_thread = None
+
         self._log(f"Pipeline instance created for port {self.port}.")
 
     def _log(self, message, level="INFO"):
@@ -522,8 +527,13 @@ class StreamPipeline:
         self._log("Active session cleaned up.")
 
     def start_pipeline_manager(self):
-        """Starts the main listening and management loop in a separate thread."""
-        self.manager_thread = threading.Thread(target=self._listening_loop, daemon=True, name=f"Manager_{self.name}")
+        """启动主动连接 ESP32 的管理循环（在新线程中）。"""
+        # 若启用广播发现，先启动广播监听线程
+        if self.config.get('use_broadcast', False):
+            self._broadcast_thread = threading.Thread(target=self._author_broadcast, daemon=True, name=f"Bcast_{self.name}")
+            self._broadcast_thread.start()
+            self._log("Broadcast listener thread started.")
+        self.manager_thread = threading.Thread(target=self._client_connect_loop, daemon=True, name=f"Manager_{self.name}")
         self.manager_thread.start()
         self._log("Manager thread started.")
 
@@ -550,80 +560,131 @@ class StreamPipeline:
             else:
                 self._log("Manager thread finished successfully.")
 
-    def _listening_loop(self):
-        """Main pipeline manager loop."""
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.server_socket.settimeout(1.0)
-
-        try:
-            self.server_socket.bind(('', self.port))
-            self.server_socket.listen(8)
-            self._log(f"Listening on port {self.port} started successfully...")
-        except Exception as e:
-            self._log(f"CRITICAL ERROR: Failed to bind or listen on port {self.port}: {e}", "ERROR")
-            if self.server_socket: self.server_socket.close() 
-            return 
-
-        while not self.global_server_stop_event.is_set():
+    def _author_broadcast(self):
+        """开始UDP广播监听线程，监听ESP32广播包，记录最近一次广播IP
+        广播端口默认与ESP32 tcp端口相同（8888）或可在config中配置。"""
+        broadcast_port = self.config.get('broadcast_port', self.config['esp32_port'])
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("", broadcast_port))
+        sock.settimeout(1.0)
+        while not self.global_server_stop_event.is_set() and not self.pipeline_internal_stop_event.is_set():
             try:
-                self.client_connection, client_address = self.server_socket.accept()
-                self.client_connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                self.client_connection.settimeout(self.config.get('socket_timeout', 2.0))
-                
-                self._log(f"Client {client_address} connected successfully.")
-                self.metrics['reconnections_total'].labels(pipeline_name=self.name).inc()
-
-                self.pipeline_internal_stop_event.clear()
-
-                if not self._initialize_generator_instance():
-                    self._log("Failed to initialize generator instance. Closing connection.", "ERROR")
-                    if self.client_connection: self.client_connection.close()
-                    self.client_connection = None
-                    continue
-
-                self._generator_thread = threading.Thread(target=self._generator_loop, daemon=True, name=f"{self.name}_Gen")
-                self._consumer_thread = threading.Thread(target=self._consumer_loop, daemon=True, name=f"{self.name}_Con")
-
-                self._generator_thread.start()
-                self._consumer_thread.start()
-
-                while self._consumer_thread.is_alive() and not self.global_server_stop_event.is_set():
-                    self._consumer_thread.join(timeout=0.2) 
-
-                if self.global_server_stop_event.is_set():
-                    self._log("Received global server stop signal during active client session.")
-                elif not self._consumer_thread.is_alive(): 
-                    self._log("Consumer thread finished.")
-                
-                self._cleanup_active_session()
-
-            except socket.timeout: 
-                continue 
-            except OSError as e:
-                if self.global_server_stop_event.is_set():
-                    self._log(f"Socket error '{e}' during accept, likely due to server shutdown.")
-                    break 
-                else:
-                    self._log(f"Socket error '{e}' during accept. Pausing before retry...", "ERROR")
-                    time.sleep(1) 
+                data, addr = sock.recvfrom(1024)
+                txt = data.decode('utf-8', errors='ignore')
+                if txt.startswith('ESP32:'):
+                    parts = txt.split(':')
+                    if len(parts) >= 3:
+                        ip = parts[1]
+                        port = int(parts[2])
+                        self._log(f"收到ESP32广播: {ip}:{port}", "INFO")
+                        self._last_broadcast_ip = ip
+                        self._last_broadcast_time = time.time()
+            except socket.timeout:
+                continue
             except Exception as e:
-                self._log(f"Unexpected error in listening/connection loop: {e}", "ERROR")
-                import traceback
-                traceback.print_exc()
-                if self.client_connection or self._consumer_thread or self._generator_thread:
-                     self._cleanup_active_session()
-                time.sleep(1)
+                self._log(f"广播监听错误: {e}", "WARN")
+        sock.close()
+        
+    def _discover_host(self, port):
+        """扫描本地网段以发现ESP32服务, 返回首发现的IP地址; 若未发现则返回None。
+        支持多网卡环境：遍历所有网络接口的IP进行扫描。"""
+        try:
+            host_name = socket.gethostname()
+            all_ips = socket.gethostbyname_ex(host_name)[2]
+        except Exception as e:
+            self._log(f"获取网卡信息失败: {e}", "WARN")
+            return None
+        
+        local_ips = []
+        for ip in all_ips:
+            if ip.startswith('127.') or ip.startswith('169.254.'):
+                continue
+            if '.' in ip:
+                local_ips.append(ip)
+        
+        if not local_ips:
+            self._log("未找到有效的本地IPv4地址用于扫描", "WARN")
+            return None
+        
+        for local_ip in local_ips:
+            base = '.'.join(local_ip.split('.')[:3]) + '.'
+            self._log(f"使用网卡IP {local_ip} 扫描网段 {base}0-254 以发现ESP32端口 {port}", "INFO")
+            for i in range(1, 255):
+                ip = f"{base}{i}"
+                if ip == local_ip:
+                    continue
+                try:
+                    s = socket.create_connection((ip, port), timeout=0.5)
+                    s.close()
+                    self._log(f"成功发现ESP32 IP: {ip}", "INFO")
+                    return ip
+                except Exception:
+                    continue
+        
+        self._log("未在本地网段发现ESP32", "WARN")
+        return None
 
-        self._log("Received global stop signal or critical error. Exiting listening loop.")
-        self._cleanup_active_session() 
-        
-        if self.server_socket:
+    def _client_connect_loop(self):
+        """主动连接ESP32（循环重试）。逻辑：
+        1. 默认使用配置文件中的 esp32_host
+        2. 若 use_broadcast 为真且收到30秒内有效的广播，则使用广播IP覆盖
+        3. 不再进行网段扫描（enable_discover 仅作向后兼容，已忽略）
+        4. 连接失败或断开后，等待 reconnect_interval_sec 后重试"""
+        port = self.config['esp32_port']
+        use_broadcast = self.config.get('use_broadcast', False)
+        broadcast_hold_time = self.config.get('broadcast_hold_time', 30)
+        reconnect_sec = self.config.get('reconnect_interval_sec', 3)
+
+        while not self.global_server_stop_event.is_set() and not self.pipeline_internal_stop_event.is_set():
+            # 默认使用配置文件中的 IP
+            target_ip = self.config.get('esp32_host')
+
+            # 若启用广播且收到30秒内有效的广播，则使用广播IP覆盖
+            if use_broadcast and getattr(self, '_last_broadcast_ip', None):
+                elapsed = time.time() - getattr(self, '_last_broadcast_time', 0)
+                if elapsed < broadcast_hold_time:
+                    target_ip = self._last_broadcast_ip
+                    self._log(f"使用广播IP: {target_ip}（{elapsed:.1f}秒前收到广播）", "INFO")
+                else:
+                    self._log(f"广播已过期({elapsed:.1f}s > {broadcast_hold_time}s)，使用配置IP: {target_ip}", "INFO")
+            else:
+                self._log(f"使用配置IP: {target_ip}", "INFO")
+
+            if not target_ip:
+                self._log("未获取到有效的 ESP32 IP 地址，等待重试", "ERROR")
+                time.sleep(reconnect_sec)
+                continue
+
             try:
-                self.server_socket.close()
-                self._log("Server (listening) socket closed successfully.")
-            except Exception as e_sock:
-                self._log(f"Error closing server (listening) socket: {e_sock}", "WARN")
-        
-        self._log("Manager thread completely stopped.")
+                self.client_connection = socket.create_connection((target_ip, port), timeout=self.config.get('socket_timeout', 2.0))
+                self.client_connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                self._log(f"已连接到ESP32: {target_ip}")
+            except Exception as e:
+                self._log(f"连接失败 {e}，{reconnect_sec} 秒后重试", "WARN")
+                time.sleep(reconnect_sec)
+                continue
+
+            self.metrics['reconnections_total'].labels(pipeline_name=self.name).inc()
+
+            if not self._initialize_generator_instance():
+                self._log("生成器初始化失败，关闭连接", "ERROR")
+                if self.client_connection: self.client_connection.close()
+                self.client_connection = None
+                time.sleep(reconnect_sec)
+                continue
+
+            self._generator_thread = threading.Thread(target=self._generator_loop, daemon=True, name=f"{self.name}_Gen")
+            self._consumer_thread = threading.Thread(target=self._consumer_loop, daemon=True, name=f"{self.name}_Con")
+
+            self._generator_thread.start()
+            self._consumer_thread.start()
+
+            while self._consumer_thread.is_alive() and not self.global_server_stop_event.is_set():
+                self._consumer_thread.join(timeout=0.2)
+            self._cleanup_active_session()
+            if self.global_server_stop_event.is_set():
+                self._log("全局停止信号已触发，退出连接循环。")
+                return
+            self._log(f"连接断开，{reconnect_sec} 秒后重试", "INFO")
+            time.sleep(reconnect_sec)
