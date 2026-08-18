@@ -35,7 +35,7 @@ bool WiFiManager::connect() {
   ESP_LOGI(TAG, "STA mode connected successfully!");
   reconnectCount = 0;
   _initialConnected = true;
-  startWebServer();
+  // startWebServer();
   return true;
  }
 

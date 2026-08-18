@@ -41,14 +41,14 @@ TTP223Sensor touchSensor(PIN_TOUCH);
 // ==================== 页面对象（指针形式，不驻留 .bss） ====================
 
 TempPage*            pTempPage            = nullptr;
-CalendarPage*        pCalendarPage        = nullptr;
-ForecastPage*        pForecastPage        = nullptr;
-PressurePage*        pPressurePage        = nullptr;
-HistoryPage*         pHistoryPage         = nullptr;
-WiFiInfoPage*        pWiFiInfoPage        = nullptr;
-StreamingPlayerPage* pStreamingPlayerPage = nullptr;
-APModePage*          pAPModePage          = nullptr;
-PageManager          pageManager(displayManager);
+  CalendarPage*        pCalendarPage        = nullptr;
+  ForecastPage*        pForecastPage        = nullptr;
+  PressurePage*        pPressurePage        = nullptr;
+  HistoryPage*         pHistoryPage         = nullptr;
+  WiFiInfoPage*        pWiFiInfoPage        = nullptr;
+  StreamingPlayerPage* pStreamingPlayerPage = nullptr;
+  APModePage*          pAPModePage          = nullptr;
+  PageManager          pageManager(displayManager);
 
 // ==================== TaskManager ====================
 
@@ -279,6 +279,7 @@ void setup() {
     pageManager.registerPage(PageManager::PAGE_WIFI_INFO,    pWiFiInfoPage);
     pageManager.registerPage(PageManager::PAGE_AP_MODE,      pAPModePage);
     pageManager.registerPage(PageManager::PAGE_STREAMING,    pStreamingPlayerPage);
+    
     
     pageManager.begin();
 

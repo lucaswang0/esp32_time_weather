@@ -6,10 +6,6 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
-#define SERVER_PORT 8888
-#define BROADCAST_PORT 8889              // PC 监听广播的 UDP 端口
-#define BROADCAST_INTERVAL_MS 2000       // 广播间隔（毫秒）
-
 class StreamingPlayerPage : public PageBase {
 public:
     StreamingPlayerPage(DisplayManager& display);
@@ -22,7 +18,11 @@ public:
 
 private:
     DisplayManager& _display;
-    
+
+    static constexpr uint16_t SERVER_PORT = 8888;
+    static constexpr uint16_t BROADCAST_PORT = 8889;  // PC 监听广播的 UDP 端口
+    static constexpr uint16_t BROADCAST_INTERVAL_MS = 2000;  // 广播间隔（毫秒）
+
     static const int HEADER_SIZE = 12;
     static const int MAX_CHUNK_SIZE = 8192;
     static const int BUFFER_SIZE = HEADER_SIZE + MAX_CHUNK_SIZE;

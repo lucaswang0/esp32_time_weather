@@ -4,8 +4,6 @@
 #include <lwip/sockets.h>
 #include <esp_log.h>
 
-#define SERVER_PORT 8888
-
 static const char* TAG = "STREAM";
 
 StreamingPlayerPage::StreamingPlayerPage(DisplayManager& display)

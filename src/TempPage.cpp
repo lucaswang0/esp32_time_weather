@@ -129,8 +129,8 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         int weatherHeight = tft.fontHeight();
         tft.unloadFont();
         
-        int circleX = 265 + weatherWidth + 6;
-        int circleY = 40 + weatherHeight / 2;
+        int circleX = 265;  // + weatherWidth + 6;
+        int circleY = 40;  // + weatherHeight / 2;
         uint16_t circleColor = forecastValid ? COLOR_GREEN : COLOR_GOLD_WARM;
         tft.fillCircle(circleX, circleY, 5, circleColor);
     }

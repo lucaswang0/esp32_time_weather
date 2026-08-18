@@ -35,7 +35,7 @@ shared:
   broadcast_port: 8889
   broadcast_hold_time: 30
   broadcast_interval: 2
-  esp32_host: 10.45.1.19  # 强制配置项
+  esp32_host: 10.45.1.9  # 强制配置项
   esp32_port: 8888
 
 # === 管道配置列表 ===
@@ -45,6 +45,6 @@ pipelines:
     target_width: 320                   # 目标屏幕宽度（像素）
     target_height: 170                  # 目标屏幕高度（像素）
     image_source_mode: "WINDOW_CAPTURE" # 图像源模式：WINDOW_CAPTURE（窗口捕获）或 SCREEN_CAPTURE（屏幕捕获）
-    window_title: "无标题 - 记事本" # 要捕获的窗口标题
+    window_title: "任务管理器" # 要捕获的窗口标题
     #crop_alignment: "left"             # 裁剪对齐方式：left/center/right
     #capture_region: {top: 0, left: 0, width: 320, height: 240, mon: 1} # SCREEN_CAPTURE模式时的捕获区域

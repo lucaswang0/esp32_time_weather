@@ -12,20 +12,20 @@
 #include "StreamingPlayerPage.h"
 #include <esp_log.h>
 
-static const char* PAGE_NAMES[] = {"温度", "3天预报", "月历","气压", "历史", "网络信息", "AP配网", "流媒体"};
+static const char* PAGE_NAMES[] = {"温度", "3天预报", "月历","气压", "历史", "网络信息", "AP配网", "流媒体", "无线显示"};
 
 static const char* TAG = "PageManager";
 
 PageManager::PageManager(DisplayManager& disp)
  : _display(disp) {
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < PAGE_COUNT; i++) {
         _pages[i] = nullptr;
     }
     _current = PAGE_TEMP;
 }
 
 void PageManager::registerPage(PageMode mode, PageBase* page) {
-    if (mode < 8) {
+    if (mode < PAGE_COUNT) {
         _pages[mode] = page;
     }
 }
@@ -36,7 +36,7 @@ void PageManager::begin() {
 }
 
 void PageManager::begin(PageMode initialMode) {
-    if (initialMode < 8 && _pages[initialMode] != nullptr) {
+    if (initialMode < PAGE_COUNT && _pages[initialMode] != nullptr) {
         _current = initialMode;
     }
     _pages[_current]->onEnter();
@@ -52,9 +52,9 @@ void PageManager::next() {
         }
         return;
     }
-    PageMode nextMode = (PageMode)((_current + 1) % 8);
+    PageMode nextMode = (PageMode)((_current + 1) % PAGE_COUNT);
     while ((_pages[nextMode] == nullptr || nextMode == PAGE_AP_MODE) && nextMode != startMode) {
-        nextMode = (PageMode)((nextMode + 1) % 8);
+        nextMode = (PageMode)((nextMode + 1) % PAGE_COUNT);
     }
     if (nextMode == startMode && _pages[startMode] == nullptr) {
         return;
@@ -71,9 +71,9 @@ void PageManager::prev() {
         }
         return;
     }
-    PageMode prevMode = (PageMode)((_current + 8 - 1) % 8);
+    PageMode prevMode = (PageMode)((_current + PAGE_COUNT - 1) % PAGE_COUNT);
     while ((_pages[prevMode] == nullptr || prevMode == PAGE_AP_MODE) && prevMode != startMode) {
-        prevMode = (PageMode)((prevMode + 8 - 1) % 8);
+        prevMode = (PageMode)((prevMode + PAGE_COUNT - 1) % PAGE_COUNT);
     }
     if (prevMode == startMode && _pages[startMode] == nullptr) {
         return;
@@ -82,7 +82,7 @@ void PageManager::prev() {
 }
 
 void PageManager::switchTo(PageMode mode) {
-    if (mode >= 8) return;
+    if (mode >= PAGE_COUNT) return;
     if (_pages[mode] == nullptr) return; // 跳过未注册
     if (mode == _current) return;
 
