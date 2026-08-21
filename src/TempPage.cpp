@@ -121,7 +121,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         lastForecastValid = forecastValid;
         
         String weatherStr = weather.length() > 0 ? weather : "--";
-        _display.drawTextWithTransparentBg(weatherStr.c_str(), 265, 60, COLOR_WHITE);
+        _display.drawTextWithTransparentBg(weatherStr.c_str(), 270, 60, COLOR_WHITE);
         
         TFT_eSPI& tft = _display.getTFT();
         tft.loadFont(font_small_20);
@@ -129,7 +129,7 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         int weatherHeight = tft.fontHeight();
         tft.unloadFont();
         
-        int circleX = 265;  // + weatherWidth + 6;
+        int circleX = 290;  // + weatherWidth + 6;
         int circleY = 40;  // + weatherHeight / 2;
         uint16_t circleColor = forecastValid ? COLOR_GREEN : COLOR_GOLD_WARM;
         tft.fillCircle(circleX, circleY, 5, circleColor);
@@ -145,8 +145,16 @@ void TempPage::drawWeather(const String& city, const String& weather, const Stri
         ESP_LOGI(TAG, "温度变更: %s", temp.c_str());
         lastTemp = temp;
         
-        String tempStr = "外:" + (temp.length() > 0 ? temp : "--");
-        _display.drawTextWithTransparentBg(tempStr.c_str(), 150, 130, COLOR_WHITE);
+        char tempStr[16];
+        // 检查是否为空或无效值
+        if (temp.isEmpty() || temp == "--" || temp == "N/A" || temp == "null") {
+            snprintf(tempStr, sizeof(tempStr), "外:--");
+        } else {
+            float val = temp.toFloat();
+            snprintf(tempStr, sizeof(tempStr), "外:%.1f", val);
+        }
+        
+        _display.drawTextWithTransparentBg(tempStr, 150, 130, COLOR_WHITE);
     }
 }
 
@@ -167,7 +175,7 @@ void TempPage::drawForecast(const String& tempMin, const String& tempMax, const 
     
     String forecastStr = String(minStr) + "° - " + String(maxStr) + "°";
     
-    _display.drawTextWithTransparentBgFont(forecastStr.c_str(), 190, 95, COLOR_WHITE, font_medium_32);
+    _display.drawTextWithTransparentBgFont(forecastStr.c_str(), 190, 103, COLOR_WHITE, font_medium_32);
 }
 
 void TempPage::drawSunMoon(const String& sunrise, const String& sunset, const String& moonPhaseIcon) {

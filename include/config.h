@@ -56,8 +56,6 @@
 #define DAYLIGHT_OFFSET_SEC 0
 
 // ==================== 更新间隔配置（毫秒）====================
-#define WEATHER_UPDATE_INTERVAL  3600000 // 1 小时
-#define TIME_SYNC_INTERVAL       3600000 // 1 小时
 #define WIFI_CHECK_INTERVAL      10000   // 10 秒
 #define TEMP_READ_INTERVAL       5000    // 5 秒
 

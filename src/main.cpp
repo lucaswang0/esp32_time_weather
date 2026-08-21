@@ -19,7 +19,7 @@
 #include "ForecastPage.h"
 #include "PressurePage.h"
 #include "HistoryPage.h"
-#include "WiFiInfoPage.h"
+#include "SysInfoPage.h"
 #include "APModePage.h"
 #include "StreamingPlayerPage.h"
 #include <driver/gpio.h>
@@ -298,7 +298,7 @@ void setup() {
     taskManager->begin();
    
     // 播放启动自检声
-    buzzerController.startupChime();
+    // buzzerController.startupChime();
     
 }
 

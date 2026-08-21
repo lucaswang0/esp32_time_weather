@@ -393,9 +393,9 @@ void HistoryPage::checkAndCleanOldFiles() {
     
     ESP_LOGI(TAG, "LittleFS usage: %.1f%% (%zu/%zu bytes)", usagePercent, usedBytes, totalBytes);
     
-    // 如果空间使用超过80%，清理最老的文件
+    // 如果空间使用超过80%，清理3天前的文件
     if (usagePercent > 80.0) {
-        ESP_LOGW(TAG, "Storage space low, cleaning old files...");
+        ESP_LOGW(TAG, "Storage space low, cleaning files older than 3 days...");
         
         fs::File root = LittleFS.open("/");
         if (!root) {
@@ -403,47 +403,42 @@ void HistoryPage::checkAndCleanOldFiles() {
             return;
         }
         
-        fs::File file = root.openNextFile();
-        String oldestFile = "";
-        time_t oldestTime = time(NULL);
+        // 计算3天前的时间戳
+        time_t cutoffTime = time(NULL) - 3 * 24 * 3600;
         
+        fs::File file = root.openNextFile();
         while (file) {
             String filename = file.name();
+            fs::File next = root.openNextFile();  // 先取下一个，再关闭当前
+            file.close();
+            
             if (filename.startsWith("/history_") && filename.endsWith(".dat")) {
                 // 从文件名提取日期
                 int yearStart = filename.indexOf('_') + 1;
                 int monthStart = yearStart + 5;
                 int dayStart = monthStart + 3;
                 
-                if (yearStart > 0 && monthStart > 0 && dayStart > 0) {
-                    int year = filename.substring(yearStart, yearStart + 4).toInt();
-                    int month = filename.substring(monthStart, monthStart + 2).toInt();
-                    int day = filename.substring(dayStart, dayStart + 2).toInt();
-                    
-                    struct tm tm_info = {0};
-                    tm_info.tm_year = year - 1900;
-                    tm_info.tm_mon = month - 1;
-                    tm_info.tm_mday = day;
-                    time_t fileTime = mktime(&tm_info);
-                    
-                    if (fileTime < oldestTime) {
-                        oldestTime = fileTime;
-                        oldestFile = filename;
+                int year = filename.substring(yearStart, yearStart + 4).toInt();
+                int month = filename.substring(monthStart, monthStart + 2).toInt();
+                int day = filename.substring(dayStart, dayStart + 2).toInt();
+                
+                struct tm tm_info = {0};
+                tm_info.tm_year = year - 1900;
+                tm_info.tm_mon = month - 1;
+                tm_info.tm_mday = day;
+                time_t fileTime = mktime(&tm_info);
+                
+                if (fileTime < cutoffTime) {
+                    if (LittleFS.remove(filename)) {
+                        ESP_LOGI(TAG, "Deleted old file: %s", filename.c_str());
+                    } else {
+                        ESP_LOGE(TAG, "Failed to delete: %s", filename.c_str());
                     }
                 }
             }
-            file = root.openNextFile();
+            file = next;
         }
         
         root.close();
-        
-        // 删除最老的文件
-        if (oldestFile.length() > 0) {
-            if (LittleFS.remove(oldestFile)) {
-                ESP_LOGI(TAG, "Deleted old file: %s", oldestFile.c_str());
-            } else {
-                ESP_LOGE(TAG, "Failed to delete: %s", oldestFile.c_str());
-            }
-        }
     }
 }

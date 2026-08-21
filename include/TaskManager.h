@@ -61,14 +61,14 @@ private:
     unsigned long _lastIpLocationAttempt = 0;
     const unsigned long IP_RETRY_BASE_MS = 10 * 1000;    // 10s 起步
     const unsigned long IP_RETRY_MAX_MS = 5 * 60 * 1000;  // 最长 5 分钟
-    const unsigned long CURRENT_WEATHER_MIN_INTERVAL_MS = 10 * 60 * 1000; // 当前天气10分钟最小间隔
-    const unsigned long FORECAST_MIN_INTERVAL_MS = 60 * 60 * 1000;       // 天气预报1小时最小间隔
+    const unsigned long CURRENT_WEATHER_MIN_INTERVAL_MS = 60 * 60 * 1000;       // 当日天气1小时最小间隔
+    const unsigned long FORECAST_MIN_INTERVAL_MS = 8 * 60 * 60 * 1000;         // 3日天气预报8小时最小间隔
     
     // 时间同步状态
     volatile bool _timeSynced = false;
     bool _firstSyncAttempted = false;
     const unsigned long TIME_SYNC_INTERVAL_INITIAL = 5 * 60 * 1000;
-    const unsigned long TIME_SYNC_INTERVAL_SUCCESS = 60 * 60 * 1000;
+    const unsigned long TIME_SYNC_INTERVAL_SUCCESS = 24 * 60 * 60 * 1000;
     
     // 任务句柄
     TaskHandle_t _taskWiFi = NULL;
