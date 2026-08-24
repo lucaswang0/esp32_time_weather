@@ -57,18 +57,18 @@ void CalendarPage::drawCalendar(int year, int month, int day) {
     tft.loadFont(font_small_20);
     char title[20];
     sprintf(title, "%d年%d月", year, month);
-    tft.drawString(title, 160, 5);
+    tft.drawString(title, 160, 2);
     tft.unloadFont();
 
     tft.loadFont(font_small_20);
     const char* weekDays[] = {"日", "一", "二", "三", "四", "五", "六"};
     for (int i = 0; i < 7; i++) {
         tft.setTextColor((i == 0 || i == 6) ? COLOR_GOLD_WARM : TFT_WHITE);
-        tft.drawString(weekDays[i], 20 + i * 45, 25);
+        tft.drawString(weekDays[i], 20 + i * 45, 22);
     }
 
     int dayX = 20;
-    int dayY = 45;
+    int dayY = 42;
     int dayIndex = firstDayOfWeek;
 
     for (int i = 0; i < firstDayOfWeek; i++) {

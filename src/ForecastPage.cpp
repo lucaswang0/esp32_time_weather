@@ -93,16 +93,23 @@ void ForecastPage::drawHeader() {
     String city = _weather.getCity();
     tft.drawString(city.length() > 0 ? ("[" + city + "]") : "[--]", 4, 4);
 
-    // 右侧：HH:MM 更新（_time 未同步时显示 --:--）
+    // 右侧：分开绘制
     tft.setTextDatum(TR_DATUM);
     int year = _time.getYear();
+
+    // 先绘制时间（ASCII字符）
+    char timeStr[8];
     if (year > 2020) {
-        char timeStr[8];
-        snprintf(timeStr, sizeof(timeStr), "%02d:%02d 更新", _time.getHour(), _time.getMinute());
-        tft.drawString(timeStr, 316, 4);
+        snprintf(timeStr, sizeof(timeStr), "%02d:%02d", _time.getHour(), _time.getMinute());
     } else {
-        tft.drawString("--:-- 更新", 316, 4);
+        snprintf(timeStr, sizeof(timeStr), "--:--");
     }
+    tft.drawString(timeStr, 280, 4);  // 留出"更新"的空间
+
+    int textWidth = tft.textWidth(timeStr);
+    // 再绘制"更新"（中文字符）
+    // 使用 Unicode 码点或直接字符串
+    tft.drawString("更新", 280+textWidth, 4);  // 调整位置    
 
     tft.unloadFont();
 }
@@ -126,32 +133,30 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
     // 行 2 (y=46): 天气文字
     String weatherText = day.textDay.length() > 0 ? day.textDay : "--";
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(weatherText, centerX, y + 24);
+    tft.drawString(weatherText, centerX, y + 26);
 
     // 行 3 (y=68): 温度 "22°/30°" — 用项目自定义的 COLOR_GOLD_WARM 暖金色
     String tempText;
     if (day.tempMin.length() > 0 && day.tempMax.length() > 0) {
-        tempText = day.tempMin + "°";
+        float tempMinText = day.tempMin.toFloat();
+        char tempMinStr[10];
+        dtostrf(tempMinText, 0, 0, tempMinStr);
+        float tempMaxText = day.tempMax.toFloat();
+        char tempMaxStr[10];
+        dtostrf(tempMaxText, 0, 0, tempMaxStr);
+        tempText = String(tempMinStr) + "°/" + String(tempMaxStr) + "°";
     } else {
         tempText = "--°/--°";
     }
     tft.setTextColor(COLOR_GOLD_WARM);
-    tft.drawString(tempText, centerX, y + 44);
-
-    if (day.tempMin.length() > 0 && day.tempMax.length() > 0) {
-        tempText = day.tempMax + "°";
-    } else {
-        tempText = "--°/--°";
-    }
-    tft.setTextColor(COLOR_GOLD_WARM);
-    tft.drawString(tempText, centerX, y + 68);    
+    tft.drawString(tempText, centerX, y + 48);
 
     // 行 4 (y=90): 湿度 "湿80%"
     String humText = day.humidity.length() > 0
         ? ("湿" + day.humidity + "%")
         : "湿--%";
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(humText, centerX, y + 90);
+    tft.drawString(humText, centerX, y + 70);
 
     // 行 5 (y=112): 风向（方位代码 → 中文描述 + "风"）
     String windDirText;
@@ -166,7 +171,7 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
         windDirText = "--风";
     }
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(windDirText, centerX, y + 112);
+    tft.drawString(windDirText, centerX, y + 92);
 
     // 行 6 (y=134): 风力等级 "1-3级"
     String windScaleText;
@@ -175,7 +180,7 @@ void ForecastPage::drawCard(int x, int y, int w, int h, const DailyForecast& day
     } else {
         windScaleText = "--级";
     }
-    tft.drawString(windScaleText, centerX, y + 132);
+    tft.drawString(windScaleText, centerX, y + 114);
 
     tft.unloadFont();
 }
