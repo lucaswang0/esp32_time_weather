@@ -1,4 +1,4 @@
-﻿#include "WiFiManager.h"
+#include "WiFiManager.h"
 #include <esp_log.h>
 #include "config.h"
 #include "secrets.h"
@@ -211,7 +211,37 @@ bool WiFiManager::autoConnect() {
  if (hasSavedCredentials()) {
   ESP_LOGI(TAG, "Trying saved WiFi credentials...");
 
-  for (int i = 0; i < credentialCount; i++) {
+  // 先扫描环境，优先连接可见的已保存WiFi，避免逐个盲等20秒
+  int order[MAX_WIFI_CREDENTIALS];
+  for (int i = 0; i < credentialCount; i++) order[i] = i;
+
+  WiFi.disconnect(false);
+  delay(100);
+  int found = WiFi.scanNetworks(false, false);
+  if (found > 0 && credentialCount > 1) {
+   int rssi[MAX_WIFI_CREDENTIALS];
+   for (int i = 0; i < credentialCount; i++) {
+    rssi[i] = -127;  // 未发现
+    for (int j = 0; j < found; j++) {
+     if (savedCredentials[i].ssid == WiFi.SSID(j)) {
+      rssi[i] = WiFi.RSSI(j);
+      break;
+     }
+    }
+   }
+   // 按RSSI降序简单选择排序，未发现的排在最后
+   for (int i = 0; i < credentialCount; i++) {
+    for (int j = i + 1; j < credentialCount; j++) {
+     if (rssi[order[j]] > rssi[order[i]]) {
+      int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+     }
+    }
+   }
+  }
+  if (found >= 0) WiFi.scanDelete();
+
+  for (int oi = 0; oi < credentialCount; oi++) {
+   const int i = order[oi];
    ESP_LOGI(TAG, " Trying SSID %d: %s", i + 1, savedCredentials[i].ssid.c_str());
 
    WiFi.mode(apStarted ? WIFI_AP_STA : WIFI_STA);
