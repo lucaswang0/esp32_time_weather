@@ -15,6 +15,12 @@
 #define COLOR_HUMI        0xCFE7  // 亮青，湿度线
 #define COLOR_PRESS       0x07FF  // 亮青蓝，气压线
 #define COLOR_TEXT        0xFFFF  // 白字（前向替代 TFT_BLACK）
+#define COLOR_ALT         0xFD20  // 橙黄，海拔读数
+
+// 气压换算海拔（压高公式）：h = 44330 * (1 - (p/p0)^(1/5.255))，p0 = 1013.25 hPa
+static float calcAltitude(float pressure) {
+    return 44330.0f * (1.0f - powf(pressure / 1013.25f, 1.0f / 5.255f));
+}
 
 static const char* TAG = "HistoryPage";
 
@@ -234,13 +240,13 @@ void HistoryPage::drawStatusBar() {
     time_t now = time(NULL);
     struct tm *tm_info = localtime(&now);
     char time_str[32];
-    strftime(time_str, sizeof(time_str), "%Y/%m/%d %H:%M:%S", tm_info);
+    strftime(time_str, sizeof(time_str), "%m/%d %H:%M", tm_info);
     // 时间字符串：透明背景绘制
-    _display.drawTextWithTransparentBg(time_str, 5, 10, COLOR_TEXT);
+    _display.drawTextWithTransparentBg(time_str, 3, 10, COLOR_TEXT);
 
     if (historyCount > 0) {
         int last = historyCount - 1;
-        char tBuf[16], hBuf[16], pBuf[16];
+        char tBuf[16], hBuf[16], pBuf[16], aBuf[16];
 
         // 预格式化三段彩色文本
         dtostrf(history[last].temperature, 4, 1, numBuf);
@@ -249,21 +255,25 @@ void HistoryPage::drawStatusBar() {
         sprintf(hBuf, "H:%s%% ", numBuf);
         dtostrf(history[last].pressure, 5, 1, numBuf);
         sprintf(pBuf, "P:%shPa", numBuf);
+        dtostrf(calcAltitude(history[last].pressure), 4, 0, numBuf);
+        sprintf(aBuf, "海:%sm", numBuf);
 
         // 测量各段宽度以便按段拼接（默认 font_small_20）
         tft.loadFont(font_small_20);
         int tW = tft.textWidth(tBuf);
         int hW = tft.textWidth(hBuf);
         int pW = tft.textWidth(pBuf);
+        int aW = tft.textWidth(aBuf);
         tft.unloadFont();
 
         // 透明背景分段绘制
-        int x = 160;
+        int x = 115;
         _display.drawTextWithTransparentBg(tBuf, x, 10, COLOR_TEMP);
         x += tW;
         _display.drawTextWithTransparentBg(hBuf, x, 10, COLOR_HUMI);
         x += hW;
-        _display.drawTextWithTransparentBg(pBuf, 200, 155, COLOR_PRESS);
+        _display.drawTextWithTransparentBg(aBuf, x, 10, COLOR_ALT);
+        _display.drawTextWithTransparentBg(pBuf, 200, 150, COLOR_PRESS);
     }
 }
 
@@ -276,7 +286,7 @@ void HistoryPage::drawWeatherGraph() {
     int graph_x = 10;
     int graph_y = 30;
     int graph_w = 300;
-    int graph_h = 110;
+    int graph_h = 100;
 
     // 局部 fillRect 清除曲线残影（仅 304x114 像素，曲线区域保留灰色背景）
     // 其他区域（状态栏/底栏）透出全局背景图
@@ -382,7 +392,7 @@ void HistoryPage::drawBottomBar() {
     // 记录数文本：透明背景
     char recBuf[32];
     sprintf(recBuf, "记录: %d  间隔: 10Min", historyCount);
-    _display.drawTextWithTransparentBg(recBuf, 5, 155, COLOR_TEXT);
+    _display.drawTextWithTransparentBg(recBuf, 5, 150, COLOR_TEXT);
 }
 
 void HistoryPage::checkAndCleanOldFiles() {
@@ -412,7 +422,7 @@ void HistoryPage::checkAndCleanOldFiles() {
             fs::File next = root.openNextFile();  // 先取下一个，再关闭当前
             file.close();
             
-            if (filename.startsWith("/history_") && filename.endsWith(".dat")) {
+            if (filename.startsWith("history_") && filename.endsWith(".dat")) {
                 // 从文件名提取日期
                 int yearStart = filename.indexOf('_') + 1;
                 int monthStart = yearStart + 5;
@@ -429,7 +439,7 @@ void HistoryPage::checkAndCleanOldFiles() {
                 time_t fileTime = mktime(&tm_info);
                 
                 if (fileTime < cutoffTime) {
-                    if (LittleFS.remove(filename)) {
+                    if (LittleFS.remove("/" + filename)) {
                         ESP_LOGI(TAG, "Deleted old file: %s", filename.c_str());
                     } else {
                         ESP_LOGE(TAG, "Failed to delete: %s", filename.c_str());

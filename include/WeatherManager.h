@@ -50,10 +50,10 @@ public:
     const String& getCity() const;
     const String& getWeatherText() const;
     const String& getTemperature() const;
-    const String& getLastUpdateTime() const;
     const String& getWeatherCode() const;
     const CityInfo& getCityInfo() const;
     const DailyForecast& getForecast(int dayIndex) const;
+    const String& getForecastFetchTime() const;
     
     // IP定位相关方法
     bool fetchLocationByIP();
@@ -73,7 +73,6 @@ private:
     String city;
     String weatherText;
     String temperature;
-    String lastUpdateTime;
     String weatherCode;
     
     // 城市信息
@@ -81,6 +80,9 @@ private:
     
     // 3天天气预报
     DailyForecast forecasts[3];
+
+    // 天气预报数据获取时间 "HH:MM"（成功获取时记录本地时间）
+    String forecastFetchTime;
     
     // 辅助方法
     String base64url_encode(const uint8_t* data, size_t len);
@@ -90,6 +92,7 @@ private:
                       uint8_t* signature);
     bool gzipDecompress(uint8_t* compressed, size_t compressedLen, char* decompressed, size_t* decompressedLen);
     String generateJWT();
+    void recordForecastFetchTime();
 };
 
 #endif

@@ -45,14 +45,14 @@ void WiFiInfoPage::drawStaticContent(TFT_eSPI& tft) {
     tft.setTextColor(TFT_WHITE);
     // tft.drawString("连接状态:", 5, 5);
     tft.drawString("WiFi名称:", 5, 5);
-    tft.drawString("IP地址:", 5, 30);
-    tft.drawString("DNS地址:", 5, 55);
-    tft.drawString("信号强度:", 5, 80);
-    tft.drawString("Min/Free/Total:", 5, 105);
-    tft.drawString("Uptime:", 5, 130);
-    tft.drawString("Version:", 5, 155);
+    tft.drawString("IP地址:", 5, 28);
+    tft.drawString("DNS地址:", 5, 51);
+    tft.drawString("信号强度:", 5, 74);
+    tft.drawString("Min/Free/Total:", 5, 97);
+    tft.drawString("Uptime:", 5, 120);
+    tft.drawString("Version:", 5, 143);
     tft.setTextColor(TFT_CYAN);
-    tft.drawString(APP_VERSION, 130, 155);
+    tft.drawString(APP_VERSION, 130, 143);
     tft.setTextColor(COLOR_GOLD_WARM);
     // tft.drawString("长按10秒进入AP配网", 5, 180);
         // 准备要显示的文字数组
@@ -86,8 +86,8 @@ void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
     tft.drawString(_wifi.getSSID(), 120, 5);
     
     tft.setTextColor(TFT_WHITE);
-    tft.drawString(_wifi.getLocalIP(), 120, 30);
-    tft.drawString(_wifi.getdnsIP(), 120, 55);
+    tft.drawString(_wifi.getLocalIP(), 120, 28);
+    tft.drawString(_wifi.getdnsIP(), 120, 51);
     
     // 清除该区域的旧内容（加一点边距防止边缘残留）
     // tft.fillRect(120, 105, strWidth + 5, 20, TFT_BLACK);
@@ -107,7 +107,7 @@ void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
     char uptimeStr[24];
     snprintf(uptimeStr, sizeof(uptimeStr), "%lud %02lu:%02lu:%02lu",
              days, hrs % 24, mins % 60, secs % 60);
-    _display.drawTextWithTransparentBgFont(uptimeStr, 135, 130, TFT_WHITE, font_small_20);
+    _display.drawTextWithTransparentBgFont(uptimeStr, 135, 120, TFT_WHITE, font_small_20);
 
     // 最小剩余内存/内存可用/总内存
     uint32_t minFree = ESP.getMinFreeHeap();
@@ -116,11 +116,11 @@ void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
     char memStr[24];
     snprintf(memStr, sizeof(memStr), "%luK/%luK/%luK",
              minFree / 1024, freeHeap / 1024, totalHeap / 1024);
-    _display.drawTextWithTransparentBgFont(memStr, 135, 105, TFT_WHITE, font_small_20);
+    _display.drawTextWithTransparentBgFont(memStr, 150, 97, TFT_WHITE, font_small_20);
 
     tft.unloadFont();
 
     char rssiStr[16];
     snprintf(rssiStr, sizeof(rssiStr), "%d dBm", _wifi.getRSSI());
-    _display.drawTextWithTransparentBgFont(rssiStr, 120, 80, TFT_WHITE, font_small_20);
+    _display.drawTextWithTransparentBgFont(rssiStr, 120, 74, TFT_WHITE, font_small_20);
 }

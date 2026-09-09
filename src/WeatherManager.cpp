@@ -261,14 +261,7 @@ bool WeatherManager::fetchCurrentWeather() {
                         temperature = doc["temperature"]["value"].as<String>() + "°C";
                         weatherText = condition["text"].as<String>();
                         weatherCode = condition["code"].as<String>();
-                        
-                        time_t now_t = time(NULL);
-                        struct tm timeinfo;
-                        localtime_r(&now_t, &timeinfo);
-                        char updateTime[20];
-                        strftime(updateTime, sizeof(updateTime), "%Y-%m-%d %H:%M:%S", &timeinfo);
-                        lastUpdateTime = String(updateTime);
-                        
+
                         ESP_LOGI(TAG, "温度: %s", temperature.c_str());
                         ESP_LOGI(TAG, "天气: %s", weatherText.c_str());
                         ESP_LOGI(TAG, "天气代码: %s", weatherCode.c_str());
@@ -475,7 +468,9 @@ bool WeatherManager::fetch3DayForecast() {
                                          forecasts[i].sunset.c_str(),
                                          forecasts[i].moonPhaseIcon.c_str());
                         }
-                        
+
+                        recordForecastFetchTime();
+
                         https.end();
                         return true;
                     } else {
@@ -511,6 +506,7 @@ bool WeatherManager::fetch3DayForecast() {
                                 forecasts[i].sunset = ss.length() >= 16 ? ss.substring(11, 16) : ss;
                                 forecasts[i].moonPhaseIcon = moonPhaseToIcon(day["astro"]["moonPhase"].as<String>());
                             }
+                            recordForecastFetchTime();
                             https.end();
                             return true;
                         }
@@ -972,10 +968,6 @@ const String& WeatherManager::getTemperature() const {
     return temperature;
 }
 
-const String& WeatherManager::getLastUpdateTime() const {
-    return lastUpdateTime;
-}
-
 const String& WeatherManager::getWeatherCode() const {
     return weatherCode;
 }
@@ -990,4 +982,18 @@ const DailyForecast& WeatherManager::getForecast(int dayIndex) const {
         return forecasts[dayIndex];
     }
     return empty;
+}
+
+const String& WeatherManager::getForecastFetchTime() const {
+    return forecastFetchTime;
+}
+
+void WeatherManager::recordForecastFetchTime() {
+    // 记录本地时间作为"数据获取时间"（NTP 已同步，time() 返回可信本地时间）
+    time_t now = time(NULL);
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    char buf[8];
+    strftime(buf, sizeof(buf), "%H:%M", &timeinfo);
+    forecastFetchTime = buf;
 }

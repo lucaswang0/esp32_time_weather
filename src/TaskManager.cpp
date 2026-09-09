@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include "config.h"
 #include "HistoryPage.h"
-#include "PressurePage.h"
 #include "TempPage.h"
 
 static const char* TAG = "TaskManager";
@@ -14,7 +13,6 @@ TaskManager::TaskManager(
     WeatherManager& weatherManager,
     AHT20BMP280Sensor& sensor,
     HistoryPage* historyPage,
-    PressurePage* pressurePage,
     TempPage* tempPage,
     PageManager& pageManager,
     SemaphoreHandle_t displayMutex
@@ -23,7 +21,6 @@ TaskManager::TaskManager(
     _weatherManager(weatherManager),
     _sensor(sensor),
     _historyPage(historyPage),
-    _pressurePage(pressurePage),
     _tempPage(tempPage),
     _pageManager(pageManager),
     _displayMutex(displayMutex)
@@ -529,14 +526,6 @@ void TaskManager::taskHistory() {
                         _sensor.getTemperature(),
                         _sensor.getHumidity(),
                         _sensor.getPressure());
-                }
-                
-                if (_pressurePage != nullptr && _pressurePage->checkAlert()) {
-                    ESP_LOGW(TAG, "[TaskHistory] 气压警告触发，自动切换到气压页面！");
-                    if (xSemaphoreTake(_displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                        _pageManager.switchTo(PageManager::PAGE_PRESSURE);
-                        xSemaphoreGive(_displayMutex);
-                    }
                 }
             }
         }

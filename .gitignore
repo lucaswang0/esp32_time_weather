@@ -61,7 +61,6 @@ compile_commands.json
 # ====================
 # 用户特定
 # ====================
-FileToCArray/
 logs/
 *.log
 *.tmp

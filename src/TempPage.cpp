@@ -255,27 +255,39 @@ void TempPage::drawWiFiStatus(bool connected) {
         lastWiFiConnected = connected;
         lastRSSI = rssi;
 
+        TFT_eSPI& tft = _display.getTFT();
         if (!connected) {
             _display.drawTextWithTransparentBgFont("--", 280, 3, COLOR_GRAY_DARK, font_small_20);
         } else {
-            String rssiStr = String(rssi);
-            char rssiChar[8];
-            rssiStr.toCharArray(rssiChar, sizeof(rssiChar));
+            // 4 格信号条：2px 宽 + 1px 间距，高度 4/7/10/13，底对齐 y=16
+            const int barW = 2;
+            const int barGap = 1;
+            const int baseY = 16;
+            const int heights[4] = {4, 7, 10, 13};
+            const int startX = 288;
 
-            uint16_t wifiColor;
+            // 按 RSSI 决定激活格数与激活色（与原阈值/配色保持一致）
+            int activeBars;
+            uint16_t activeColor;
             if (rssi >= -55) {
-                wifiColor = COLOR_GREEN;
+                activeBars = 4; activeColor = COLOR_GREEN;
             } else if (rssi >= -65) {
-                wifiColor = COLOR_CYAN;
+                activeBars = 3; activeColor = COLOR_CYAN;
             } else if (rssi >= -75) {
-                wifiColor = COLOR_ORANGE_YELLOW;
+                activeBars = 2; activeColor = COLOR_ORANGE_YELLOW;
             } else if (rssi >= -85) {
-                wifiColor = COLOR_ORANGE_RED;
+                activeBars = 1; activeColor = COLOR_ORANGE_RED;
             } else {
-                wifiColor = COLOR_RED;
+                activeBars = 1; activeColor = COLOR_RED;
             }
 
-            _display.drawTextWithTransparentBgFont(rssiChar, 285, 3, wifiColor, font_small_20);
+            for (int i = 0; i < 4; i++) {
+                int x = startX + i * (barW + barGap);
+                int h = heights[i];
+                int y = baseY - h;
+                uint16_t color = (i < activeBars) ? activeColor : COLOR_GRAY_DARK;
+                tft.fillRect(x, y, barW, h, color);
+            }
         }
     }
 }

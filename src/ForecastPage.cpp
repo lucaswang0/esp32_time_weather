@@ -2,7 +2,6 @@
 #include <esp_log.h>
 #include "DisplayManager.h"
 #include "WeatherManager.h"
-#include "TimeManager.h"
 #include "WiFiManager.h"
 #include "font_small_20.h"
 
@@ -30,9 +29,8 @@ static String mapWindDir(const String& code) {
     if (code == "vrb")    return "风向变化不定";
     return "";  // 未知代码返回空，后续显示 --
 }
-ForecastPage::ForecastPage(DisplayManager& disp, WeatherManager& weather,
-                           TimeManager& time, WiFiManager& wifi)
-    : _display(disp), _weather(weather), _time(time), _wifi(wifi) {}
+ForecastPage::ForecastPage(DisplayManager& disp, WeatherManager& weather, WiFiManager& wifi)
+    : _display(disp), _weather(weather), _wifi(wifi) {}
 
 void ForecastPage::onEnter() {
     ESP_LOGI(TAG, "onEnter");
@@ -59,7 +57,9 @@ void ForecastPage::update() {
 //   y=134: 风力       (1-3级)
 //   y=156: 卡片下边框 (cardH=134)
 void ForecastPage::draw3DayForecast(const DailyForecast& day0, const DailyForecast& day1, const DailyForecast& day2) {
-    String key = day0.date + day0.textDay + day0.tempMin + day0.tempMax +
+    // 包含 fetchTime：每次成功获取都重新渲染"更新时间"
+    String key = _weather.getForecastFetchTime() +
+                 day0.date + day0.textDay + day0.tempMin + day0.tempMax +
                  day1.date + day1.textDay + day1.tempMin + day1.tempMax +
                  day2.date + day2.textDay + day2.tempMin + day2.tempMax;
     if (key == lastForecastPageKey) {
@@ -67,7 +67,7 @@ void ForecastPage::draw3DayForecast(const DailyForecast& day0, const DailyForeca
     }
     lastForecastPageKey = key;
 
-    drawHeader();
+    drawHeader(_weather.getForecastFetchTime());
 
     const DailyForecast days[3] = {day0, day1, day2};
 
@@ -83,7 +83,7 @@ void ForecastPage::draw3DayForecast(const DailyForecast& day0, const DailyForeca
     }
 }
 
-void ForecastPage::drawHeader() {
+void ForecastPage::drawHeader(const String& updateTime) {
     TFT_eSPI& tft = _display.getTFT();
     tft.loadFont(font_small_20);
 
@@ -95,21 +95,19 @@ void ForecastPage::drawHeader() {
 
     // 右侧：分开绘制
     tft.setTextDatum(TR_DATUM);
-    int year = _time.getYear();
 
-    // 先绘制时间（ASCII字符）
+    // 使用数据获取时间（WeatherManager 在成功 fetch 后记录的本地时间）
     char timeStr[8];
-    if (year > 2020) {
-        snprintf(timeStr, sizeof(timeStr), "%02d:%02d", _time.getHour(), _time.getMinute());
+    if (updateTime.length() >= 5) {
+        snprintf(timeStr, sizeof(timeStr), "%s", updateTime.c_str());
     } else {
         snprintf(timeStr, sizeof(timeStr), "--:--");
     }
-    tft.drawString(timeStr, 280, 4);  // 留出"更新"的空间
+    tft.drawString(timeStr, 250, 4);  // 留出"更新"的空间
 
     int textWidth = tft.textWidth(timeStr);
     // 再绘制"更新"（中文字符）
-    // 使用 Unicode 码点或直接字符串
-    tft.drawString("更新", 280+textWidth, 4);  // 调整位置    
+    tft.drawString("更新", 250+textWidth, 4);  // 调整位置
 
     tft.unloadFont();
 }

@@ -17,7 +17,6 @@
 #include "TempPage.h"
 #include "CalendarPage.h"
 #include "ForecastPage.h"
-#include "PressurePage.h"
 #include "HistoryPage.h"
 #include "SysInfoPage.h"
 #include "APModePage.h"
@@ -43,7 +42,6 @@ TTP223Sensor touchSensor(PIN_TOUCH);
 TempPage*            pTempPage            = nullptr;
   CalendarPage*        pCalendarPage        = nullptr;
   ForecastPage*        pForecastPage        = nullptr;
-  PressurePage*        pPressurePage        = nullptr;
   HistoryPage*         pHistoryPage         = nullptr;
   WiFiInfoPage*        pWiFiInfoPage        = nullptr;
   StreamingPlayerPage* pStreamingPlayerPage = nullptr;
@@ -55,7 +53,7 @@ TempPage*            pTempPage            = nullptr;
 TaskManager* taskManager = nullptr;
 
 // Arduino core 的 getArduinoLoopTaskStackSize() 是 weak，默认返回 8K。
-// 这里 override 为 32K，避免 HistoryPage/PressurePage 绘制链把栈踩穿。
+// 这里 override 为 32K，避免 HistoryPage 绘制链把栈踩穿。
 // Arduino.h 把它声明成 C++ linkage（C++ 函数允许 weak override），所以不要用 extern "C"。
 size_t getArduinoLoopTaskStackSize(void) {
     return 32768;
@@ -264,8 +262,7 @@ void setup() {
     // 启动页面管理器
     pTempPage     = new TempPage(displayManager, weatherManager, aht20Bmp280Sensor, wifiManager);
     pCalendarPage = new CalendarPage(displayManager, timeManager);
-    pForecastPage = new ForecastPage(displayManager, weatherManager, timeManager, wifiManager);
-    pPressurePage = new PressurePage(displayManager, aht20Bmp280Sensor);
+    pForecastPage = new ForecastPage(displayManager, weatherManager, wifiManager);
     pHistoryPage            = new HistoryPage(displayManager, aht20Bmp280Sensor);
     pAPModePage            = new APModePage(displayManager, wifiManager);
     pWiFiInfoPage          = new WiFiInfoPage(displayManager, wifiManager);
@@ -274,7 +271,6 @@ void setup() {
     pageManager.registerPage(PageManager::PAGE_TEMP,         pTempPage);
     pageManager.registerPage(PageManager::PAGE_FORECAST,     pForecastPage);
     pageManager.registerPage(PageManager::PAGE_CALENDAR,     pCalendarPage);
-    pageManager.registerPage(PageManager::PAGE_PRESSURE,     pPressurePage);
     pageManager.registerPage(PageManager::PAGE_HISTORY,      pHistoryPage);
     pageManager.registerPage(PageManager::PAGE_WIFI_INFO,    pWiFiInfoPage);
     pageManager.registerPage(PageManager::PAGE_AP_MODE,      pAPModePage);
@@ -290,7 +286,6 @@ void setup() {
         weatherManager,
         aht20Bmp280Sensor,
         pHistoryPage,
-        pPressurePage,
         pTempPage,
         pageManager,
         displayMutex
@@ -357,7 +352,7 @@ void handleChime() {
     int currentMinute = timeManager.getMinute();
     int currentSecond = timeManager.getSecond();
     
-    if (currentHour >= 6 && currentHour <= 19 && 
+    if (currentHour >= 6 && currentHour <= 21 && 
         currentMinute == 59 && currentSecond == 55 && 
         currentHour != lastChimeHour) {
         lastChimeHour = currentHour;

@@ -5,14 +5,13 @@
 #include "TempPage.h"
 #include "CalendarPage.h"
 #include "ForecastPage.h"
-#include "PressurePage.h"
 #include "HistoryPage.h"
 #include "SysInfoPage.h"
 #include "APModePage.h"
 #include "StreamingPlayerPage.h"
 #include <esp_log.h>
 
-static const char* PAGE_NAMES[] = {"温度", "3天预报", "月历","气压", "历史", "系统信息", "AP配网", "流媒体", "无线显示"};
+static const char* PAGE_NAMES[] = {"温度", "3天预报", "月历", "历史", "系统信息", "AP配网", "流媒体", "无线显示"};
 
 static const char* TAG = "PageManager";
 

@@ -11,7 +11,6 @@
 #include "PageManager.h"
 
 class HistoryPage;
-class PressurePage;
 class TempPage;
 
 class TaskManager {
@@ -22,7 +21,6 @@ public:
         WeatherManager& weatherManager,
         AHT20BMP280Sensor& sensor,
         HistoryPage* historyPage,
-        PressurePage* pressurePage,
         TempPage* tempPage,
         PageManager& pageManager,
         SemaphoreHandle_t displayMutex
@@ -41,7 +39,6 @@ private:
     WeatherManager& _weatherManager;
     AHT20BMP280Sensor& _sensor;
     HistoryPage* _historyPage;
-    PressurePage* _pressurePage;
     TempPage* _tempPage;
     PageManager& _pageManager;
     SemaphoreHandle_t _displayMutex;
