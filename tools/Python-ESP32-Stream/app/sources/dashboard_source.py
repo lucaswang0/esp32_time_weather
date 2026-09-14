@@ -26,19 +26,64 @@ log = logging.getLogger(__name__)
 _temp_monitor = TemperatureMonitor()
 
 
-def compute_layout_height(widget_cfgs: list[dict], width: int,
-                          gap: int = GAP_Y) -> int:
-    """估算自动排列组件的总高（手动定位的组件不计入），供 GUI 超限提示。"""
-    total = 2
-    for cfg in widget_cfgs:
+def _intersects(x: int, y: int, w: int, h: int, r: dict,
+                gap: int) -> bool:
+    """两矩形（外扩 gap 间距）在 x/y 投影上是否都相交。"""
+    return (x < r["x"] + r["w"] + gap and x + w + gap > r["x"]
+            and y < r["y"] + r["h"] + gap and y + h + gap > r["y"])
+
+
+def compute_layout(widget_cfgs: list[dict], width: int, height: int,
+                   gap: int = GAP_Y) -> list[dict]:
+    """计算各启用组件的实际占位矩形（统一自动/手动定位，禁止重合）。
+
+    - 自动组件（x/y 均为空）：按配置顺序沿左列纵向堆叠；
+    - 手动组件：优先锚定其 x/y，但必须通过碰撞消解——与任何已放置组件
+      的 x 投影相交时整体下移到最近空隙，因此传感器行数动态增长也不会
+      压到其他组件；
+    - 仅设置 x（右列悬浮）的组件不占据左列自动流，其余组件均推进堆叠游标。
+    返回 [{widget, cfg_index, type, x, y, w, h}]，按配置顺序排列。
+    """
+    placed: list[dict] = []
+    auto_y = 2
+
+    def avoid(x: int, y: int, w: int, h: int) -> int:
+        """下移到不与任何已放置矩形相交为止（y 单调增大，必然收敛）。"""
+        while True:
+            target = y
+            for r in placed:
+                if _intersects(x, y, w, h, r, gap):
+                    target = max(target, r["y"] + r["h"] + gap)
+            if target == y:
+                return y
+            y = target
+
+    for i, cfg in enumerate(widget_cfgs):
         if not cfg.get("enabled", True):
             continue
-        if cfg.get("x") is not None or cfg.get("y") is not None:
+        widget = build_widget(cfg)
+        if widget is None:
             continue
-        w = build_widget(cfg)
-        if w:
-            total += w.height(width) + gap
-    return total
+        h = widget.height(width)
+        manual_x, manual_y = cfg.get("x"), cfg.get("y")
+        if manual_x is not None or manual_y is not None:
+            x = MARGIN_X if manual_x is None else int(manual_x)
+            y = auto_y if manual_y is None else int(manual_y)
+        else:
+            x, y = MARGIN_X, auto_y
+        x = max(0, min(x, width - 8))
+        max_w = width - x - MARGIN_X
+        comp_w = int(cfg["w"]) if cfg.get("w") is not None \
+            else widget.natural_width()
+        comp_w = max(8, min(comp_w, max_w))
+        y = max(0, avoid(x, y, comp_w, h))
+        placed.append({"widget": widget, "cfg_index": i,
+                       "type": cfg.get("type"), "x": x, "y": y,
+                       "w": comp_w, "h": h})
+        # 仅"右列悬浮"（只设 x、未设 y）不推进左列自动流
+        if not (manual_x is not None and manual_y is None):
+            auto_y = max(auto_y, y + h + gap)
+    return placed
 
 
 def cover_image(img: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -192,36 +237,21 @@ class DashboardSource(FrameSource):
         return self._bg_cache.copy()
 
     def _render(self, metrics: dict) -> None:
-        """按组件布局重绘缓存帧，并记录命中矩形。"""
+        """按组件布局重绘缓存帧，并记录命中矩形（碰撞消解，禁止重合）。"""
         img = self._background()
         draw = ImageDraw.Draw(img)
-        width, _ = self.resolution
-        gap = int(self._dash_cfg.get("gap", GAP_Y))
-        rects: list[dict] = []
-        auto_y = 2
+        width, height = self.resolution
         with self._lock:
-            active = list(self._widgets)
-            widget_cfgs = self._dash_cfg.get("widgets", [])
-        for widget in active:
-            cfg = widget.cfg
-            cfg_index = next((i for i, c in enumerate(widget_cfgs)
-                              if c is cfg), -1)
-            h = widget.height(width)
-            manual_x, manual_y = cfg.get("x"), cfg.get("y")
-            if manual_x is not None or manual_y is not None:
-                x = MARGIN_X if manual_x is None else int(manual_x)
-                y = auto_y if manual_y is None else int(manual_y)
-            else:
-                x, y = MARGIN_X, auto_y
-                auto_y = y + h + gap
-            # 宽度：固定值优先，否则按内容自适应；统一裁到画布右边界内
-            max_w = width - x - MARGIN_X
-            comp_w = int(cfg["w"]) if cfg.get("w") is not None \
-                else widget.natural_width()
-            comp_w = max(8, min(comp_w, max_w))
-            widget.draw(draw, x, y, comp_w, metrics)
-            rects.append({"cfg_index": cfg_index, "type": cfg.get("type"),
-                          "x": x, "y": y, "w": comp_w, "h": h})
+            widget_cfgs = list(self._dash_cfg.get("widgets", []))
+            gap = int(self._dash_cfg.get("gap", GAP_Y))
+        rects: list[dict] = []
+        for layout in compute_layout(widget_cfgs, width, height, gap):
+            layout["widget"].draw(draw, layout["x"], layout["y"],
+                                  layout["w"], metrics)
+            rects.append({"cfg_index": layout["cfg_index"],
+                          "type": layout["type"],
+                          "x": layout["x"], "y": layout["y"],
+                          "w": layout["w"], "h": layout["h"]})
         self._cache = img
         self._rects = rects
 

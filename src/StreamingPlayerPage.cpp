@@ -110,7 +110,7 @@ void StreamingPlayerPage::drawDisconnectedOverlay() {
     auto& tft = _display.getTFT();
     tft.loadFont(font_small_20);
     tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.setTextColor(COLOR_SUN, TFT_BLACK);
     tft.drawString("连接中断...", 160, 85);
     tft.unloadFont();
 }

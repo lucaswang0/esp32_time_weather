@@ -48,40 +48,40 @@ sources:
     - type: clock
       enabled: true
       color: '#FFD700'
-      x: 213
-      y: 0
+      x: null
+      y: null
       w: 106
       scale: 1.2
     - type: cpu
       enabled: true
       color: '#00E676'
       sparkline: true
-      x: 0
-      y: 114
-      w: null
+      x: 176
+      y: 0
+      w: 161
       scale: 1.2
     - type: memory
       enabled: true
       color: '#40C4FF'
-      x: 0
-      y: 92
+      x: 123
+      y: 34
       w: null
       scale: 1.2
     - type: disk
       enabled: true
       color: '#FFAB40'
       path: C:\
-      x: 0
-      y: 148
+      x: 153
+      y: 61
       w: null
       scale: 1.0
     - type: net
       enabled: true
       color: '#E040FB'
       adapter: null
-      x: 119
-      y: 129
-      w: null
+      x: 0
+      y: 63
+      w: 133
       scale: 1.0
     - type: temp
       enabled: true
@@ -161,29 +161,29 @@ sources:
         lhm:/vram/data/3: false
         lhm:/vram/load/1: false
         lhm:/gpu-nvidia/0/throughput/1: false
-      x: 0
-      y: 0
+      x: null
+      y: null
       w: null
       scale: 1.1
     - type: uptime
       enabled: false
       color: '#FFFFFF'
-      x: 4
-      y: 2
+      x: null
+      y: null
       w: null
       scale: 1.0
     - type: ip
       enabled: false
       color: '#AAAAAA'
-      x: 4
-      y: 2
+      x: null
+      y: null
       w: null
       scale: 1.0
     - type: custom_text
       enabled: false
       color: '#FFFFFF'
       text: ''
-      x: 4
-      y: 2
+      x: null
+      y: null
       w: null
       scale: 1.0

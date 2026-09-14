@@ -10,7 +10,7 @@ import tkinter.filedialog as fd
 from PIL import ImageDraw
 
 from ..sources.dashboard_source import (DashboardSource,
-                                        compute_layout_height, _temp_monitor)
+                                        compute_layout, _temp_monitor)
 from ..sources.widgets import list_disk_paths, list_net_adapters
 from .preview import PreviewPlayer
 
@@ -192,6 +192,8 @@ class DashboardPanel(ctk.CTkFrame):
             keys = [s["key"] for s in sensors]
             if keys != self._temp_rendered_keys:
                 self._render_temp_sensors(sensors)
+                # 传感器行数变化会改变组件高度，刷新越界/重合警告
+                self._update_warning()
             if keys:
                 self._temp_hint.configure(
                     text=f"{len(keys)} 个传感器（温度/电压/风扇/功耗等；"
@@ -484,9 +486,15 @@ class DashboardPanel(ctk.CTkFrame):
     def _update_warning(self) -> None:
         width, height = (self.cfg["video"]["target_width"],
                          self.cfg["video"]["target_height"])
-        total = compute_layout_height(self._widgets, width, self._gap)
-        if total > height:
-            self._warn.configure(text=f"⚠ 自动排列组件总高 {total}px 超出画布 {height}px")
+        rects = compute_layout(self._widgets, width, height, self._gap)
+        over = [r for r in rects
+                if r["y"] + r["h"] > height or r["x"] + r["w"] > width]
+        if over:
+            names = "、".join(dict.fromkeys(
+                _TYPE_LABEL.get(r["type"], r["type"]) for r in over))
+            self._warn.configure(
+                text=f"⚠ {len(over)} 个组件超出画布（{names}），"
+                     "请减少传感器勾选、调小缩放或重新拖动排列")
         else:
             self._warn.configure(text="")
 
