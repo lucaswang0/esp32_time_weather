@@ -1,0 +1,21 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+dist/
+vendor/
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# User config
+config.yaml
+config.local.yaml

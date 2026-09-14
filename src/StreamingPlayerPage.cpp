@@ -8,10 +8,6 @@ static const char* TAG = "STREAM";
 
 StreamingPlayerPage::StreamingPlayerPage(DisplayManager& display)
     : _display(display), _tcpServer(SERVER_PORT) {
-    _lastFpsUpdateTime = millis();
-    _frameCount = 0;
-    _currentFps = 0.0f;
-    strcpy(_fpsText, "帧率:0.0");
 }
 
 StreamingPlayerPage::~StreamingPlayerPage() {
@@ -33,10 +29,7 @@ void StreamingPlayerPage::onEnter() {
     _lastConnectAttempt = 0;
     _lastClientDisconnectT = millis();
     _connectionFailureCount = 0;
-    _lastFpsUpdateTime = millis();
-    _frameCount = 0;
-    _currentFps = 0.0f;
-    strcpy(_fpsText, "帧率:0.0");
+    _hasConnectedOnce = false;
 
     if (!_rawBuf) {
         _rawBuf = new uint8_t[BUFFER_SIZE];
@@ -112,13 +105,13 @@ void StreamingPlayerPage::drawErrorScreen(const char* msg) {
     tft.unloadFont();
 }
 
-void StreamingPlayerPage::drawFps() {
+void StreamingPlayerPage::drawDisconnectedOverlay() {
+    // 不清屏，保留最后一帧画面，仅在屏幕中间叠加"连接中断..."
     auto& tft = _display.getTFT();
     tft.loadFont(font_small_20);
-    tft.fillRect(320 - 60, 0, 60, 18, TFT_BLACK);
-    tft.setTextDatum(TR_DATUM);
-    tft.setTextColor(TFT_GREEN);
-    tft.drawString(_fpsText, 320 - 2, 2);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.drawString("连接中断...", 160, 85);
     tft.unloadFont();
 }
 
@@ -173,6 +166,11 @@ bool StreamingPlayerPage::listenForClient() {
         _rdPos = 0;
         _lastFrameT = millis();
         _state = ST_PLAYING;
+        // 重连时清屏，移除上一帧及"连接中断..."叠加层
+        if (_hasConnectedOnce) {
+            _display.getTFT().fillScreen(TFT_BLACK);
+        }
+        _hasConnectedOnce = true;
         // 连接后停止广播
         ESP_LOGI(TAG, "连接后调用 stopBroadcast");
         stopBroadcast();
@@ -199,7 +197,7 @@ void StreamingPlayerPage::update() {
             _tcpClient.stop();
             _state = ST_LISTENING;
             _lastClientDisconnectT = millis();
-            drawConnectingScreen();
+            drawDisconnectedOverlay();
             return;
         }
 
@@ -246,7 +244,7 @@ void StreamingPlayerPage::update() {
                         _tcpClient.stop();
                         _state = ST_LISTENING;
                         _lastClientDisconnectT = millis();
-                        drawConnectingScreen();
+                        drawDisconnectedOverlay();
                         return;
                     }
 
@@ -266,18 +264,10 @@ void StreamingPlayerPage::update() {
 
                 if (_rdPos >= _dataLen) {
                     _lastFrameT = n;
-                    _frameCount++;
-                    if (n - _lastFpsUpdateTime >= 1000) {
-                        _currentFps = _frameCount * 1000.0f / (n - _lastFpsUpdateTime);
-                        _frameCount = 0;
-                        _lastFpsUpdateTime = n;
-                        snprintf(_fpsText, sizeof(_fpsText), "帧率:%.1f", _currentFps);
-                    }
                     if (_frameW > 0 && _frameH > 0 && _frameX < 320 && _frameY < 170) {
                         tft.setSwapBytes(true);
                         tft.pushImage(_frameX, _frameY, _frameW, _frameH, (uint16_t*)_rawBuf);
                         tft.setSwapBytes(false);
-                        drawFps();
                     }
                     _rdPhase = 0;
                     _rdPos = 0;
@@ -290,7 +280,7 @@ void StreamingPlayerPage::update() {
             _tcpClient.stop();
             _state = ST_LISTENING;
             _lastClientDisconnectT = millis();
-            drawConnectingScreen();
+            drawDisconnectedOverlay();
         }
 
         return;

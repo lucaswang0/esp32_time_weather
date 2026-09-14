@@ -1,0 +1,189 @@
+connection:
+  esp32_host: 10.45.1.9
+  esp32_port: 8888
+  use_broadcast: true
+  broadcast_port: 8889
+  broadcast_hold_time: 30
+  reconnect_interval_sec: 3.0
+  socket_timeout: 1.0
+video:
+  target_width: 320
+  target_height: 170
+  target_fps: 24.0
+  generator_target_interval_sec: 0.03
+  max_chunk_data_size: 8192
+  gamma: 1.2
+  wb_scale:
+  - 1.1
+  - 1.05
+  - 0.95
+  min_dirty_rect_threshold: 1
+  max_dirty_rect_threshold: 180
+  threshold_adjustment_step_up: 15
+  threshold_adjustment_step_down: 5
+  fps_history_size: 3
+  fps_hysteresis_factor: 0.03
+  frames_queue_max_size: 8
+  generator_low_water_mark: 3
+  heartbeat_interval_sec: 2.0
+active_source: dashboard
+ui:
+  close_to_tray: true
+  start_minimized: false
+  tray_switch_source: true
+sources:
+  desktop:
+    monitor: 0
+    region: null
+    crop_alignment: center
+  window:
+    window_title: 任务管理器
+    crop_alignment: left
+  dashboard:
+    background: '#0B0F14'
+    bg_image: null
+    refresh_interval_sec: 1.0
+    gap: 2
+    widgets:
+    - type: clock
+      enabled: true
+      color: '#FFD700'
+      x: 213
+      y: 0
+      w: 106
+      scale: 1.2
+    - type: cpu
+      enabled: true
+      color: '#00E676'
+      sparkline: true
+      x: 0
+      y: 114
+      w: null
+      scale: 1.2
+    - type: memory
+      enabled: true
+      color: '#40C4FF'
+      x: 0
+      y: 92
+      w: null
+      scale: 1.2
+    - type: disk
+      enabled: true
+      color: '#FFAB40'
+      path: C:\
+      x: 0
+      y: 148
+      w: null
+      scale: 1.0
+    - type: net
+      enabled: true
+      color: '#E040FB'
+      adapter: null
+      x: 119
+      y: 129
+      w: null
+      scale: 1.0
+    - type: temp
+      enabled: true
+      color: '#FF7043'
+      temp_enabled:
+        lhm:/intelcpu/0/load/2: false
+        lhm:/intelcpu/0/load/3: false
+        lhm:/intelcpu/0/load/4: false
+        lhm:/intelcpu/0/load/5: false
+        lhm:/intelcpu/0/load/6: false
+        lhm:/intelcpu/0/load/7: false
+        lhm:/intelcpu/0/load/9: false
+        lhm:/intelcpu/0/load/8: false
+        lhm:/intelcpu/0/load/1: false
+        lhm:/intelcpu/0/power/0: false
+        lhm:/intelcpu/0/power/1: false
+        lhm:/intelcpu/0/power/3: false
+        lhm:/intelcpu/0/power/4: false
+        lhm:/ram/data/0: false
+        lhm:/ram/data/1: false
+        lhm:/ram/load/0: false
+        lhm:/gpu-nvidia/0/clock/0: false
+        lhm:/gpu-nvidia/0/clock/4: false
+        lhm:/gpu-nvidia/0/load/0: false
+        lhm:/gpu-nvidia/0/load/1: false
+        lhm:/gpu-nvidia/0/load/2: false
+        lhm:/gpu-nvidia/0/load/3: false
+        lhm:/gpu-nvidia/0/smalldata/2: false
+        lhm:/gpu-nvidia/0/smalldata/0: false
+        lhm:/gpu-nvidia/0/smalldata/1: false
+        lhm:/gpu-nvidia/0/throughput/0: false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/power/0
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/smalldata/2
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/smalldata/1
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/smalldata/0
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/5
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/9
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/11
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/6
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/10
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/0
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/1
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/2
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/3
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/8
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/12
+        : false
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/7
+        : false
+        lhm:/hdd/0/factor/24: false
+        lhm:/hdd/0/factor/23: false
+        lhm:/hdd/0/data/31: true
+        lhm:/hdd/0/load/51: false
+        lhm:/hdd/0/load/52: false
+        lhm:/hdd/0/load/53: false
+        lhm:/hdd/0/throughput/54: true
+        lhm:/hdd/0/throughput/55: true
+        ? lhm:/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3EA0%26SUBSYS_08BD1028%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/4
+        : false
+        lhm:/hdd/0/load/30: false
+        lhm:/intelcpu/0/load/0: false
+        lhm:/vram/data/2: false
+        lhm:/vram/data/3: false
+        lhm:/vram/load/1: false
+        lhm:/gpu-nvidia/0/throughput/1: false
+      x: 0
+      y: 0
+      w: null
+      scale: 1.1
+    - type: uptime
+      enabled: false
+      color: '#FFFFFF'
+      x: 4
+      y: 2
+      w: null
+      scale: 1.0
+    - type: ip
+      enabled: false
+      color: '#AAAAAA'
+      x: 4
+      y: 2
+      w: null
+      scale: 1.0
+    - type: custom_text
+      enabled: false
+      color: '#FFFFFF'
+      text: ''
+      x: 4
+      y: 2
+      w: null
+      scale: 1.0

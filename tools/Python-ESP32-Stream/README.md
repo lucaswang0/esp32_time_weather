@@ -1,204 +1,119 @@
-# ESP32-C3 Real-time Screen/Data Streaming Client/Server
+# ESP32 Stream — 屏幕推流上位机（GUI）
 
-This project demonstrates streaming visual data in real-time from a PC to an ESP32-C3 microcontroller equipped with a TFT display. The multi-threaded Python server on the PC can capture a selected screen region or generate various data visualizations (like a BIOS-style screen, CPU monitor, or Prometheus metrics dashboard). An Arduino sketch on the ESP32-C3 receives and renders this stream over a TCP connection. Differential updates with an adaptive threshold are used to minimize latency and bandwidth, optimizing for visual quality versus frame rate. Server-side color correction options are included for better display fidelity.
+PC 端通过 Wi-Fi(TCP) 把画面实时推送到 ESP32 + TFT 屏。纯 GUI 应用（无控制台），
+支持**桌面 / 指定窗口 / 仪表盘**三种画面源运行时热切换，可最小化到系统托盘，
+打包为单个 `ESP32Stream.exe`，配置全部保存在 exe 同目录的 `config.yaml`。
 
-* Wiki: [https://deepwiki.com/vpuhoff/Python-ESP32-TFT-Stream](https://deepwiki.com/vpuhoff/Python-ESP32-TFT-Stream/1-overview)
+## 功能
 
-## Features
+- **三种画面源（运行时一键切换，TCP 不断开，切换后首帧全量刷新）**
+  - **桌面**：选择显示器或自定义物理像素区域，支持 left/center/right 裁剪对齐
+  - **指定窗口**：GUI 内刷新/搜索窗口列表，选中即推，窗口丢失自动等待恢复
+  - **仪表盘**：本地系统指标（psutil 渲染），可勾选/排序/改色/选参数的组件：
+    时钟、CPU（含历史曲线图）、内存、磁盘分区、网卡上下行速率、
+    **温度**（显卡/CPU/主板/硬盘，传感器逐个勾选）、运行时间、IP、自定义文本；
+    每个组件支持 **0.8–2.0× 缩放**与**自由定位**（在 2× 预览上直接拖拽，或在卡片里填 x/y）；
+    组件宽度按**内容自适应、不再占满整行**，可拖预览中选中框的右边缘或填"宽"像素固定；
+    不需要定位的组件勾"自动"即可参与纵向排列，"自动排列全部"一键复位；
+    自动排列的**组件间距**可在"间距"框设置（0–50 像素，默认 2，超画布高度会红字提示）；
+    背景支持**纯色取色或本地图片**（等比裁剪填充画布，可一键清除回纯色）
+- **连接**：配置 IP/端口直连 + UDP 广播自动发现 ESP32（广播 IP 有效期内覆盖配置 IP），
+  断线自动重连；状态栏实时显示连接灯/FPS/帧计数
+- **画质**：伽马、白平衡、目标 FPS、脏矩形自适应阈值、RGB565 分包均可在界面调整
+- **系统托盘**：关闭窗口默认驻留托盘（推流不中断），托盘菜单可启停/切换画面源，
+  图标颜色表示连接状态，"退出"才真正结束
+- **协议**：与现有 ESP32 固件完全兼容（固件零改动，见文末协议说明）
 
-* **Multiple Stream Sources:**
-    * Streams a selected screen region from a PC (Windows/macOS/Linux).
-    * Generates and streams a pseudo BIOS/POST screen.
-    * Generates and streams a real-time CPU usage monitor.
-    * Generates and streams a dashboard of system metrics collected from a Prometheus instance.
-* Displays the stream on an ESP32-C3 driven TFT screen (using the TFT_eSPI library).
-* Uses TCP for communication with `TCP_NODELAY` enabled for potentially lower latency.
-* **Advanced Differential Updates:**
-    * Implements differential updates (sending only changed screen regions).
-    * Features an **adaptive threshold** for `dirty_rect` detection, dynamically balancing image quality and frame rate based on processing performance.
-* Handles large updates by chunking them into smaller packets.
-* Includes server-side gamma and white balance correction for fine-tuning color reproduction.
-* **Multi-threaded Python Server:** Utilizes separate threads for frame generation and frame processing/sending, improving responsiveness and throughput.
-* Arduino client for receiving and rendering on ESP32.
-* Configurable resolution, capture area (for screen streaming), and target FPS for adaptive threshold.
-* Handles connection drops and attempts reconnection with visual feedback on ESP32.
-* **Comprehensive Prometheus Exporter:** The Python server includes a Prometheus exporter to monitor its own performance in detail (e.g., processing times for different stages, packet sizes, queue lengths, calculated FPS, adaptive threshold value).
+## 目录结构
 
-## Hardware Requirements
+```
+app/                  应用源码（Python 包）
+  main.py             入口（PyInstaller 入口脚本，绝对导入）
+  paths.py            exe 同目录路径解析（配置/日志外置）
+  app_config.py       配置模型/默认值/YAML 读写/校验
+  controller.py       GUI 门面：启停、热切换、整体重启
+  pipeline.py         连接管理/重连/帧源热切换编排
+  consumer.py         差分/自适应阈值/分包发送/心跳
+  discovery.py        UDP 广播发现
+  imaging.py          numpy 向量化：伽马/WB/脏矩形/RGB565/打包
+  tray.py             pystray 系统托盘
+  sources/            三种帧源 + 仪表盘组件
+  gui/                CustomTkinter 界面（主窗口/三面板/状态栏/日志/预览）
+build/esp32_stream.spec   PyInstaller 规格（onefile + windowed）
+build/build.ps1           一键打包脚本
+tools/fake_esp32_receiver.py  本地假 ESP32 接收端（开发/排障用，不打包）
+config.yaml           外部配置（首次运行自动生成默认值）
+```
 
-* **ESP32-C3 Development Board:** Any ESP32-C3 based board (e.g., ESP32-C3-DevKitM-1, Seeed Studio XIAO ESP32C3, Lolin C3 Mini).
-* **SPI TFT Display:** A display compatible with the [TFT_eSPI library](https://github.com/Bodmer/TFT_eSPI) (e.g., based on ILI9341, ST7789, ST7735 controllers). Common resolutions are 320x240, 240x240, etc.
-* **PC:** A computer running Windows, macOS, or Linux to host the Python server.
-* **Wi-Fi Network:** A router or access point that both the PC and ESP32-C3 can connect to.
-* **Wiring:** Jumper wires to connect the TFT display to the ESP32-C3 via SPI.
-* **(Optional for Prometheus Monitor):** A running Prometheus instance ([https://prometheus.io/](https://prometheus.io/)) collecting desired system metrics (e.g., via `node_exporter`, `windows_exporter`, `nvidia_gpu_exporter`).
+## 开发模式运行
 
-## Software Requirements
+需要 Python 3.10+（在 3.13 上验证）。
 
-### PC (Server)
+```bash
+pip install -r requirements.txt
+python -m app.main
+```
 
-* **Python:** Version 3.7 or higher recommended.
-* **Pip:** Python package installer (usually comes with Python).
-* **Python Libraries:** Install using `pip install -r requirements.txt`. Key libraries include:
-    * `mss`: For efficient cross-platform screen capture.
-    * `Pillow`: For image manipulation (resizing, format conversion, drawing).
-    * `numpy`: For efficient numerical operations (used in color correction and optimized diffing).
-    * `psutil`: For CPU utilization metrics (used by the CPU monitor).
-    * `py-cpuinfo`: For fetching CPU name (used by the CPU monitor).
-    * `prometheus_api_client`: For querying a Prometheus instance (used by the Prometheus monitor generator).
-    * `prometheus-client`: For exposing the server's own performance metrics.
-    * *(Optional, for specific window capture):* `pywin32` (Windows), `python-xlib` (Linux), `pyobjc-core` & `pyobjc-framework-Quartz` (macOS).
+开发期可用假接收端验证协议：
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+python tools/fake_esp32_receiver.py 8899   # 先把 config.yaml 里 IP 改为 127.0.0.1、端口 8899
+```
 
-### ESP32 (Client)
+## 配置文件（config.yaml）
 
-* **Arduino IDE** (version 1.8.19 or 2.x) OR **PlatformIO IDE** (within VS Code).
-* **ESP32 Arduino Core:** Board support package for ESP32. Install via the Boards Manager in Arduino IDE or PlatformIO's interface.
-* **TFT_eSPI Library:** Install via the Arduino Library Manager or manually from [Bodmer's GitHub](https://github.com/Bodmer/TFT_eSPI).
-    * **Crucially, you MUST configure TFT_eSPI for your specific ESP32 board and TFT display.** This involves editing the library's `User_Setup.h` file (or selecting the correct setup in `User_Setup_Select.h`) to define the correct pins (MOSI, SCLK, CS, DC, RST, BL - if used) and the display driver chip (e.g., `ILI9341_DRIVER`, `ST7789_DRIVER`).
+首次运行自动在 **exe/项目根目录**生成；GUI 中"应用/保存"会自动写回。
 
-## Setup & Installation
+| 段 | 关键项 |
+|---|---|
+| `connection` | `esp32_host`、`esp32_port`、`use_broadcast`、`broadcast_port`、`broadcast_hold_time`、`reconnect_interval_sec`、`socket_timeout` |
+| `video` | `target_width/height`（须与屏幕一致）、`target_fps`、`gamma`、`wb_scale[R,G,B]`、`max_chunk_data_size`（≤ ESP32 `MAX_CHUNK_SIZE`）、脏矩形阈值系列、心跳间隔 |
+| `active_source` | `desktop` / `window` / `dashboard` |
+| `ui` | `close_to_tray`（X 驻留托盘）、`start_minimized`、`tray_switch_source` |
+| `sources.desktop` | `monitor`（0=所有显示器虚拟合集）、`region`（null 或 left/top/width/height 物理像素）、`crop_alignment` |
+| `sources.window` | `window_title`（子串匹配）、`crop_alignment` |
+| `sources.dashboard` | `background`（纯色）、`bg_image`（背景图片绝对路径，null=纯色）、`refresh_interval_sec`、`gap`（自动排列组件间距像素，默认 2）、`widgets[]` |
+| `dashboard.widgets[]` | `type/enabled/color` 及各自参数；`x/y`（null=自动排列，整数=画布绝对像素定位）；`w`（null=按内容自适应宽度，整数=固定像素宽）；`scale`（0.8–2.0 缩放倍率） |
 
-1.  **Clone Repository:**
-    ```bash
-    git clone [https://github.com/vpuhoff/Python-ESP32-TFT-Stream.git](https://github.com/vpuhoff/Python-ESP32-TFT-Stream.git) esp32_stream
-    cd esp32_stream
-    ```
+## 打包为 exe
 
-2.  **Configure TFT_eSPI:**
-    * Locate the installed TFT_eSPI library folder (usually in your Arduino `libraries` folder).
-    * Edit `User_Setup.h` (or `User_Setup_Select.h`) according to your ESP32-C3 board's SPI pins and your specific TFT display model/driver. **This step is essential for the display to work correctly.**
+```powershell
+# 如 PowerShell 拦截脚本：
+powershell -ExecutionPolicy Bypass -File build\build.ps1
+```
 
-3.  **Configure ESP32 Client (`esp32.ino.txt` or your `.ino` file):**
-    * Open the `.ino` file in your Arduino IDE or PlatformIO.
-    * Modify the following variables at the top of the file:
-        * `ssid`: Your Wi-Fi network name.
-        * `password`: Your Wi-Fi password.
-        * `server_ip`: The **static IP address** of the PC running the Python server.
-        * `server_port`: The port the server will listen on (must match Python script). Default: `8888`.
-        * `PIXEL_BUFFER_SIZE`: Ensure this is large enough to hold the biggest data chunk sent by Python (must be >= `MAX_CHUNK_DATA_SIZE` in Python). Default: `10 * 1024` (10KB).
-    * Select your ESP32-C3 board from the IDE's board menu.
-    * Compile and upload the sketch to the ESP32-C3.
+产物 `dist/ESP32Stream.exe`（onefile + windowed，约 12MB）。
+**分发时只需把 `ESP32Stream.exe` 拷贝给用户**：首次运行会在同目录自动生成
+`config.yaml` 与 `logs/app.log`；也可以随 exe 附带一份预置好的 `config.yaml`。
+onefile 首次启动需数秒解压，属正常现象；如被杀毒软件误报，可加白名单或改用 onedir。
 
-4.  **Configure Python Server (`server.py`):**
-    * Navigate to the server script directory.
-    * Install Python dependencies if you haven't already: `pip install -r requirements.txt`
-    * Edit the script and configure these settings near the top:
-        * `IMAGE_SOURCE_MODE`: Choose the desired source: `"SCREEN_CAPTURE"`, `"BIOS"`, `"CPU_MONITOR"`, or `"PROMETHEUS_MONITOR"`.
-        * `PROMETHEUS_EXPORTER_PORT`: Port for the server's own performance metrics (default: `8000`).
-        * `ESP32_PORT`: The port to listen on for ESP32 connections (must match ESP32 sketch). Default: `8888`.
-        * `TARGET_WIDTH`, `TARGET_HEIGHT`: The resolution of the ESP32's display.
-        * `GENERATOR_TARGET_INTERVAL_SEC`: Approximate interval for the frame generation thread (e.g., `0.05` for 20 FPS target generation rate if resources allow).
-        * `MAX_CHUNK_DATA_SIZE`: Maximum size (in bytes) of pixel data per network packet.
-        * **Adaptive Threshold Settings:**
-            * `TARGET_FPS`: Desired FPS for the consumer thread, influences threshold adaptation.
-            * `MIN_DIRTY_RECT_THRESHOLD`, `MAX_DIRTY_RECT_THRESHOLD`: Range for the adaptive threshold.
-            * `THRESHOLD_ADJUSTMENT_STEP_UP`, `THRESHOLD_ADJUSTMENT_STEP_DOWN`: How aggressively the threshold changes.
-            * `FPS_HISTORY_SIZE`, `FPS_HYSTERESIS_FACTOR`: Parameters for FPS calculation and adaptation stability.
-        * **For Screen Capture:**
-            * `CAPTURE_REGION`: Dictionary defining the screen area to capture.
-        * **For Prometheus Monitor:**
-            * In `prometheus_monitor_generator.py`, configure `PROMETHEUS_URL` and review `METRIC_CONFIG` for your desired metrics and queries.
-        * **Color Correction (applied to all visual streams):**
-            * `GAMMA`: Gamma correction value.
-            * `WB_SCALE`: Tuple for white balance adjustment `(R_mult, G_mult, B_mult)`.
+## ESP32 端（协议说明，固件无需改动）
 
-## Usage
+- ESP32 为 TCP server（默认 8888），PC 主动连接，设置 `TCP_NODELAY`
+- 包格式：12 字节大端包头 `struct '!HHHH I'` = x, y, w, h, data_len，后接小端 RGB565
+- 单包数据 ≤ `max_chunk_data_size`（默认 8192，须 ≤ 固件 `MAX_CHUNK_SIZE`）
+- 心跳包：x=y=0xFFFF、w=h=0、data_len=0（画面静止时保活）
+- 可选 UDP 广播：ESP32 周期发送文本 `ESP32:<ip>:<port>` 到广播端口（默认 8889）
 
-1.  **Network:** Ensure the PC and ESP32-C3 are connected to the same Wi-Fi network. It's recommended to assign a static IP address to the PC running the server.
-2.  **(Optional) Prometheus Setup**: If using `PROMETHEUS_MONITOR` mode, ensure your Prometheus instance is running and scraping the necessary exporters.
-3.  **Start Server:** Open a terminal or command prompt on your PC, navigate to the script directory, and run the server:
-    ```bash
-    python server.py
-    ```
-    The server will start listening for a connection from the ESP32 and begin exposing its own metrics on `http://localhost:PROMETHEUS_EXPORTER_PORT` (or your PC's IP).
-4.  **Start Client:** Power on or reset your ESP32-C3 board.
-    * It will connect to Wi-Fi.
-    * It will display an initial screen showing its IP address and connection status.
-    * It will then attempt to connect to the configured `server_ip` and `server_port`.
-5.  **Streaming:** Once the ESP32 connects, the TFT display should start showing the content generated or captured by the Python server.
-6.  **(Optional) Monitor Server Performance**: Point your Prometheus instance to scrape `http://<PC_IP_ADDRESS>:PROMETHEUS_EXPORTER_PORT` to collect server performance metrics. Visualize them using Grafana or the Prometheus UI. Key metrics include `esp32_consumer_calculated_fps` and `esp32_current_dynamic_threshold`.
+## 温度传感器说明（Windows）
 
-## How It Works
+在"仪表盘→温度"卡片点"扫描温度传感器"，自动探测可用温度源，逐个勾选显示。
+采集后端（无需额外安装，自动选择）：
 
-1.  **TCP Connection:** ESP32 client connects to Python server. `TCP_NODELAY` is enabled.
-2.  **Multi-threaded Server Architecture (Python):**
-    * **Frame Generation Thread:** Captures or generates "raw" image frames based on `IMAGE_SOURCE_MODE`.
-        * Screen Capture: `mss` captures the screen region.
-        * CPU Monitor: `psutil` and `py-cpuinfo` gather data; `Pillow` draws.
-        * BIOS Screen: `Pillow` draws.
-        * Prometheus Monitor: `prometheus_api_client` fetches metrics; `graphics_engine.py` renders.
-        * Generated frames are placed into a thread-safe queue.
-    * **Frame Consumer Thread:**
-        * Retrieves raw frames from the queue.
-        * **Image Processing:**
-            * Resizing: `Pillow` resizes to target ESP32 resolution.
-            * Color Correction: `numpy` and `Pillow` apply gamma/white balance.
-            * Diffing: An `numpy`-based algorithm compares with the previous frame to find `dirty_rects` using an **adaptive threshold** based on current processing FPS.
-        * **Packetizing & Transmission:**
-            * Changed regions are converted to RGB565.
-            * Large updates are chunked.
-            * Headers (X, Y, W, H, DataLen) are packed.
-            * Packets sent via TCP to ESP32.
-        * **Adaptive Threshold Control:** Adjusts the `dirty_rect` threshold to maintain a target FPS.
-3.  **Reception & Rendering (ESP32):**
-    * Client reads TCP stream, parses header, reads pixel data.
-    * `TFT_eSPI.pushImage()` renders data.
-4.  **Connection Management (ESP32):** Handles connection state and retries.
-5.  **Server Performance Monitoring (Python):** `prometheus-client` exposes internal metrics (stage durations, FPS, threshold, queue size, etc.).
+| 后端 | 覆盖 | 权限要求 |
+|---|---|---|
+| nvidia-smi | NVIDIA 显卡温度（多卡逐个列出） | 无需管理员 |
+| MSAcpi 热区 (WMI) | 部分主板/笔记本的 CPU 封装近似温度 | 无需管理员 |
+| 存储可靠性计数器 (WMI) | 硬盘/NVMe 温度 | 部分磁盘需管理员 |
+| LibreHardwareMonitor / OpenHardwareMonitor (WMI) | CPU/主板/显卡/硬盘全部真实温度 | 需以**管理员身份**运行 LHM/OHM 并保持后台运行；检测到后自动优先使用 |
 
-## Troubleshooting
+提示：扫不到 CPU/主板温度是 Windows 平台限制（psutil 在 Windows 无温度 API），
+以管理员身份运行 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
+后即可获取；勾选状态保存在温度组件的 `temp_enabled`（key→bool，缺省=显示）。
 
-* **ESP32 Cannot Connect:** Check `server_ip` in ESP32 code, server running, PC firewall, Wi-Fi.
-* **ESP32 Reboots / Crashes:** Check for Out of Memory (try reducing `PIXEL_BUFFER_SIZE` on ESP32), verify TFT_eSPI pin configuration and driver.
-* **ESP32 "Exceeds buffer size" error:** Ensure `MAX_CHUNK_DATA_SIZE` (Python) <= `PIXEL_BUFFER_SIZE` (ESP32).
-* **Display Blank / Garbage / Wrong Colors:**
-    * **Crucial: Double-check TFT_eSPI configuration (`User_Setup.h`) for pins and driver.**
-    * Verify wiring.
-    * Adjust `tft.invertDisplay(true/false)` in ESP32 `setup()`.
-    * Fine-tune `GAMMA` and `WB_SCALE` in `server.py`.
-* **Slow / Laggy Performance / High Latency:**
-    * Check server Prometheus metrics: `esp32_consumer_calculated_fps` (is it near `TARGET_FPS`?), `esp32_dirty_rects_send_duration_seconds` (is network send slow?), `esp32_current_dynamic_threshold` (is it very high, indicating struggle?).
-    * High resolution/large capture area, or very frequent updates from the source generator.
-    * Slow Wi-Fi.
-    * Inefficient ESP32-side processing/rendering.
-    * Try adjusting `TARGET_FPS` and threshold range (`MIN_DIRTY_RECT_THRESHOLD`, `MAX_DIRTY_RECT_THRESHOLD`) in `server.py`.
-* **Too Many Artifacts / Blocky Updates:**
-    * The `current_dynamic_threshold` might be too high. Try increasing `TARGET_FPS` to encourage a lower threshold, or narrow the `MAX_DIRTY_RECT_THRESHOLD`.
-* **Prometheus Monitor Issues:**
-    * Prometheus server running and accessible.
-    * Correct PromQL queries in `prometheus_monitor_generator.py`.
-    * Necessary exporters running.
-* **`mss` related errors in `frame_generator_thread_func`:** Ensure `mss` is correctly initialized within the thread if capturing screen. The current code does this.
+## 常见问题
 
-## TODO / Potential Improvements
-
-* Further optimize `find_dirty_rects` (e.g., merging adjacent small dirty rectangles).
-* Implement reliable specific window capture on the server.
-* Add options for different pixel formats (e.g., grayscale).
-* Explore simple lossless compression (e.g., Run-Length Encoding) if beneficial.
-* Make server settings configurable via command-line arguments or a configuration file.
-* Implement dithering during RGB565 conversion for smoother gradients.
-* More sophisticated error handling and reporting.
-* Allow dynamic selection of `IMAGE_SOURCE_MODE` without restarting the server.
-* Refine the adaptive threshold algorithm for smoother transitions and better target FPS adherence.
-
-## License
-
-This project is released under the MIT License.
-
-## Acknowledgements
-
-* [Python](https://www.python.org/)
-* [mss](https://github.com/BoboTiG/python-mss) library
-* [Pillow](https://python-pillow.org/) library
-* [NumPy](https://numpy.org/) library
-* [psutil](https://github.com/giampaolo/psutil) library
-* [py-cpuinfo](https://github.com/workhorsy/py-cpuinfo) library
-* [Prometheus Python Client](https://github.com/prometheus/client_python)
-* [Prometheus API Client Python](https://github.com/prometheus-community/prometheus-api-client-python)
-* [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) library by Bodmer
-* Espressif IoT Development Framework ([ESP-IDF](https://github.com/espressif/esp-idf)) and the [Arduino Core for ESP32](https://github.com/espressif/arduino-esp32)
+- **抓不到窗口/画面黑屏**：目标窗口不要最小化；UWP/管理员权限窗口需要以管理员身份运行本程序
+- **画面偏移/坐标不对**：程序已设置 PerMonitorV2 DPI 感知，自定义区域请按**物理像素**填写
+- **高 DPI 屏**：mss 使用物理坐标，多显示器时注意 `monitor` 序号（1 起为物理显示器，0 为虚拟合集）
+- **连接不上**：确认与 ESP32 同一 Wi-Fi、IP/端口正确、PC 防火墙放行；状态栏变黄表示重连中

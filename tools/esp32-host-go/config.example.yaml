@@ -1,0 +1,122 @@
+# esp32-host-go 默认配置示例
+#
+# 加载顺序：exe 同目录 config.yaml → 同目录 config.example.yaml → 当前工作目录同名文件
+# 首次运行若无 config.yaml，将自动以本文件作为起点（不自动写入磁盘）。
+
+global:
+  log_level: info
+  udp_broadcast_port: 8889
+  reconnect_interval_sec: 3.0
+  heartbeat_interval_sec: 2.0
+  max_chunk_data_size: 8192
+  frames_queue_max_size: 8
+  generator_low_water_mark: 3
+  fps_history_size: 3
+
+pipelines:
+  - name: "MainScreen"
+    enabled: true
+    esp32:
+      host: ""                # 留空 -> 走 UDP 广播自动发现
+      port: 8888
+      use_broadcast: true
+      broadcast_hold_time: 30
+      socket_timeout_sec: 2.0
+    target:
+      width: 170
+      height: 320
+    source:
+      type: screen            # screen | window | sysinfo
+      screen:
+        monitor: 0            # 0 = 主显示器；>0 = 其它显示器
+        # region: { top: 0, left: 0, width: 800, height: 600 }
+    diff:
+      target_fps: 24.0
+      min_threshold: 1
+      max_threshold: 180
+      step_up: 15
+      step_down: 5
+      hysteresis: 0.03
+      generator_target_interval_sec: 0.033
+    colors:
+      gamma: 1.2
+      wb_scale: [1.1, 1.05, 0.95]
+    queue:
+      max_size: 8
+      low_water_mark: 3
+    logging:
+      level: info
+
+  # --- 取消下面任一 pipeline 的注释即可启用；同一时刻通常只跑一个 ---
+  #
+  # - name: "WindowCapture"
+  #   enabled: false
+  #   esp32:
+  #     host: ""
+  #     port: 8888
+  #     use_broadcast: true
+  #     broadcast_hold_time: 30
+  #     socket_timeout_sec: 2.0
+  #   target:
+  #     width: 170
+  #     height: 320
+  #   source:
+  #     type: window          # M3：按窗口标题抓取，title 大小写不敏感、子串匹配
+  #     window:
+  #       title: "Visual Studio Code"
+  #       crop_alignment: center   # left | center | right
+  #   diff:
+  #     target_fps: 24.0
+  #     min_threshold: 1
+  #     max_threshold: 180
+  #     step_up: 15
+  #     step_down: 5
+  #     hysteresis: 0.03
+  #     generator_target_interval_sec: 0.033
+  #   colors:
+  #     gamma: 1.2
+  #     wb_scale: [1.1, 1.05, 0.95]
+  #   queue:
+  #     max_size: 8
+  #     low_water_mark: 3
+  #   logging:
+  #     level: info
+  #
+  # - name: "SysInfoDashboard"
+  #   enabled: false
+  #   esp32:
+  #     host: ""
+  #     port: 8888
+  #     use_broadcast: true
+  #     broadcast_hold_time: 30
+  #     socket_timeout_sec: 2.0
+  #   target:
+  #     width: 170
+  #     height: 320
+  #   source:
+  #     type: sysinfo         # M4：CPU/内存/网络/磁盘仪表盘
+  #     sysinfo:
+  #       refresh_ms: 1000
+  #       widgets:
+  #         - type: text
+  #           text: "STATUS"
+  #         - type: cpu
+  #         - type: mem
+  #         - type: net
+  #         - type: disk
+  #   diff:
+  #     target_fps: 24.0
+  #     min_threshold: 1
+  #     max_threshold: 180
+  #     step_up: 15
+  #     step_down: 5
+  #     hysteresis: 0.03
+  #     generator_target_interval_sec: 0.033
+  #   colors:
+  #     gamma: 1.2
+  #     wb_scale: [1.1, 1.05, 0.95]
+  #   queue:
+  #     max_size: 8
+  #     low_water_mark: 3
+  #   logging:
+  #     level: info

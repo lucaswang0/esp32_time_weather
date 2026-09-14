@@ -1,7 +1,14 @@
+# ESP32Stream 运行依赖（Python 3.10+，推荐 3.12/3.13）
+customtkinter==6.0.0
 mss==10.2.0
-numpy==2.3.5
 pillow==12.2.0
+numpy==2.3.5
 pyyaml==6.0.3
 pygetwindow==0.0.9
-numba==0.66.0
 pyrect==0.2.0
+psutil==7.2.2
+pystray==0.19.5
+pythonnet==3.1.0
+
+# 仅打包时需要：
+# pyinstaller==6.22.2

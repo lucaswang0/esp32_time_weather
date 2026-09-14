@@ -42,23 +42,18 @@ private:
     unsigned long _lastClientDisconnectT = 0;
     int _connectionFailureCount = 0;
     const int MAX_CONNECTION_FAILURES = 999999;
+    bool _hasConnectedOnce = false;  // 是否已连接过客户端（用于区分首次等待与断线重连）
     
     uint16_t _frameX = 0;
     uint16_t _frameY = 0;
     uint16_t _frameW = 0;
     uint16_t _frameH = 0;
     uint32_t _dataLen = 0;
-    
-    // FPS计算相关
-    unsigned long _lastFpsUpdateTime = 0;
-    unsigned long _frameCount = 0;
-    float _currentFps = 0.0f;
-    char _fpsText[16];
 
     bool listenForClient();
     void drawConnectingScreen();
     void drawErrorScreen(const char* msg);
-    void drawFps();
+    void drawDisconnectedOverlay();   // 断线时不清屏，仅叠加"连接中断..."
     void sendBroadcast();        // 发送 UDP 广播包（仅在未连接时调用）
     void stopBroadcast();        // 停止广播（连接成功后停止）
 };
