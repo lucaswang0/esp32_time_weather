@@ -43,6 +43,8 @@ private:
     int _connectionFailureCount = 0;
     const int MAX_CONNECTION_FAILURES = 999999;
     bool _hasConnectedOnce = false;  // 是否已连接过客户端（用于区分首次等待与断线重连）
+    bool _overlayVisible = false;              // "连接中断..." 当前是否可见（闪烁用）
+    unsigned long _lastOverlayToggleT = 0;     // 上次闪烁切换时间戳
     
     uint16_t _frameX = 0;
     uint16_t _frameY = 0;
@@ -53,7 +55,7 @@ private:
     bool listenForClient();
     void drawConnectingScreen();
     void drawErrorScreen(const char* msg);
-    void drawDisconnectedOverlay();   // 断线时不清屏，仅叠加"连接中断..."
+    void drawDisconnectedOverlay(bool visible);   // 断线时不清屏，仅叠加"连接中断..."，visible=false时擦除
     void sendBroadcast();        // 发送 UDP 广播包（仅在未连接时调用）
     void stopBroadcast();        // 停止广播（连接成功后停止）
 };

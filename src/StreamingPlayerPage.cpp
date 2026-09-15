@@ -30,6 +30,8 @@ void StreamingPlayerPage::onEnter() {
     _lastClientDisconnectT = millis();
     _connectionFailureCount = 0;
     _hasConnectedOnce = false;
+    _overlayVisible = false;
+    _lastOverlayToggleT = 0;
 
     if (!_rawBuf) {
         _rawBuf = new uint8_t[BUFFER_SIZE];
@@ -105,13 +107,20 @@ void StreamingPlayerPage::drawErrorScreen(const char* msg) {
     tft.unloadFont();
 }
 
-void StreamingPlayerPage::drawDisconnectedOverlay() {
+void StreamingPlayerPage::drawDisconnectedOverlay(bool visible) {
     // 不清屏，保留最后一帧画面，仅在屏幕中间叠加"连接中断..."
+    // visible=false 时用黑色矩形擦除文字区域，实现闪烁
     auto& tft = _display.getTFT();
     tft.loadFont(font_small_20);
     tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(COLOR_SUN, TFT_BLACK);
-    tft.drawString("连接中断...", 160, 85);
+    int w = tft.textWidth("连接中断...");
+    int h = tft.fontHeight();
+    if (visible) {
+        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        tft.drawString("连接中断...", 160, 85);
+    } else {
+        tft.fillRect(160 - w / 2 - 2, 85 - h / 2 - 2, w + 4, h + 4, TFT_BLACK);
+    }
     tft.unloadFont();
 }
 
@@ -166,6 +175,7 @@ bool StreamingPlayerPage::listenForClient() {
         _rdPos = 0;
         _lastFrameT = millis();
         _state = ST_PLAYING;
+        _overlayVisible = false;
         // 重连时清屏，移除上一帧及"连接中断..."叠加层
         if (_hasConnectedOnce) {
             _display.getTFT().fillScreen(TFT_BLACK);
@@ -188,6 +198,12 @@ void StreamingPlayerPage::update() {
         if (listenForClient()) {
             ESP_LOGI(TAG, "Client accepted, entering PLAYING state");
         }
+        // 断线后"连接中断..."每秒闪烁一次（500ms亮 / 500ms灭）
+        if (_hasConnectedOnce && n - _lastOverlayToggleT >= 500) {
+            _lastOverlayToggleT = n;
+            _overlayVisible = !_overlayVisible;
+            drawDisconnectedOverlay(_overlayVisible);
+        }
         return;
     }
 
@@ -197,7 +213,9 @@ void StreamingPlayerPage::update() {
             _tcpClient.stop();
             _state = ST_LISTENING;
             _lastClientDisconnectT = millis();
-            drawDisconnectedOverlay();
+            _overlayVisible = true;
+            _lastOverlayToggleT = n;
+            drawDisconnectedOverlay(true);
             return;
         }
 
@@ -244,7 +262,9 @@ void StreamingPlayerPage::update() {
                         _tcpClient.stop();
                         _state = ST_LISTENING;
                         _lastClientDisconnectT = millis();
-                        drawDisconnectedOverlay();
+                        _overlayVisible = true;
+                        _lastOverlayToggleT = n;
+                        drawDisconnectedOverlay(true);
                         return;
                     }
 
@@ -280,7 +300,9 @@ void StreamingPlayerPage::update() {
             _tcpClient.stop();
             _state = ST_LISTENING;
             _lastClientDisconnectT = millis();
-            drawDisconnectedOverlay();
+            _overlayVisible = true;
+            _lastOverlayToggleT = n;
+            drawDisconnectedOverlay(true);
         }
 
         return;

@@ -30,7 +30,7 @@
 
 ![PC 端流媒体服务器 GUI](image/client.png)
 
-PC 端流媒体服务器（[esp32-host-go](tools/esp32-host-go/)），支持桌面、指定窗口、仪表盘三种推送模式，可自由拖拽布局系统监控小组件。
+PC 端流媒体服务器（[Python-ESP32-Streaming](tools/Python-ESP32-Streaming/)），支持桌面、指定窗口、仪表盘三种推送模式，可自由拖拽布局系统监控小组件。
 
 ## 硬件平台
 
@@ -43,7 +43,7 @@ PC 端流媒体服务器（[esp32-host-go](tools/esp32-host-go/)），支持桌�
 
 ## GPIO 引脚配置
 
-以下引脚配置基于 **合宙 CORE ESP32C3** 板型（`BOARD_AIRM2M_CORE_ESP32C3`），定义在 [config.h](file:///C:/Users/user/Documents/PlatformIO/Projects/esp32_time_weather/include/config.h) 和 [platformio.ini](file:///C:/Users/user/Documents/PlatformIO/Projects/esp32_time_weather/platformio.ini) 中：
+以下引脚配置基于 **合宙 CORE ESP32C3** 板型（`BOARD_AIRM2M_CORE_ESP32C3`），定义在 [config.h](include/config.h) 和 [platformio.ini](platformio.ini) 中：
 
 | GPIO 编号    | 功能        | 说明        | 方向            | 所属模块         |
 | ---------- | --------- | --------- | ------------- | ------------ |
