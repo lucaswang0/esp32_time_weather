@@ -1,0 +1,142 @@
+label {
+    width: 190px;
+    margin: 1px;
+    display: inline-block;
+    vertical-align: top;
+}
+
+fieldset {
+    width: 600px;
+}
+
+img {
+    image-rendering: optimizeSpeed;             /* STOP SMOOTHING, GIVE ME SPEED  */
+    image-rendering: -moz-crisp-edges;          /* Firefox                        */
+    image-rendering: -o-crisp-edges;            /* Opera                          */
+    image-rendering: -webkit-optimize-contrast; /* Chrome (and eventually Safari) */
+    image-rendering: pixelated; /* Chrome */
+    image-rendering: optimize-contrast;         /* CSS3 Proposed                  */
+    -ms-interpolation-mode: nearest-neighbor;   /* IE8+                           */
+}
+
+#imgPreview {
+    display: inline-block;
+    max-height: 100px;
+    min-height: 32px;
+    border: 1px solid #696969;
+}
+
+.imageConversionOption {
+}
+
+.shortInput {
+    width: 50px;
+}
+
+/*#divResult > img {
+    padding-top: 10px;
+    max-width: 95vw;
+}
+
+#fsResult {
+    max-width: 96vw;
+    width: 100%;
+}
+
+#txtResult {
+    width: 95vw;
+    height: 500px;
+    float: left;
+    font-size: 13px;
+}*/
+
+#divResult > img {
+    padding-left: 10px;
+    max-width: 800px;
+}
+
+#fsResult {
+    max-width: 1620px;
+    /*width: 100%;*/
+}
+
+#txtResult {
+    width: 800px;
+    height: 530px;
+    float: left;
+    font-size: 13px;
+}
+
+.linkButtons {
+    text-decoration: none;
+}
+
+.versionInfo {
+    font-size: 10px;
+    margin-left: 10px;
+    font-weight: normal;
+}
+
+.additionalInfo {
+    margin-top: -20px;
+    font-weight: normal;
+    font-size: 14px;
+}
+
+.signaturePreview {
+    float: right;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    padding-top: 4px;
+    color: #696969;
+}
+
+/* Tooltip container */
+.tooltip {
+    position: relative;
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAAPUExURQAAAAAAAAAAAAAAAAAAAE8O540AAAAFdFJOUwAyIhcHOGe1IAAAAFdJREFUGNNlj1ECwCAIQgW5/5lHaas1vvSpqBGWkgRT0UqAFpCVu6gVVD13q0MVBqpHptog3ELGIWdrAu3bIDYgPoC3KXstymSs/R32XnwE93Pz/cGm+wN52wDgRMjGVQAAAABJRU5ErkJggg==);
+    top: 2px;
+}
+
+/* Tooltip text */
+.tooltip .tooltiptext {
+    visibility: hidden;
+    min-width: 300px;
+    max-width: 600px;
+    background-color: #EEE;
+    color: #000;
+    border: 1px solid #696969;
+    text-align: left;
+    padding: 5px;
+    border-radius: 6px;
+ 
+    /* Position the tooltip text - see examples below! */
+    position: absolute;
+    z-index: 1;
+    top: -5px;
+    left: 150%; 
+
+    font-size: 12px;
+}
+
+/* Show the tooltip text when you mouse over the tooltip container */
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+}
+
+.tooltip .tooltiptext::after {
+    content: " ";
+    position: absolute;
+    top: 13px;
+    right: 100%; 
+    margin-top: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent black transparent transparent;
+}
+
+.image1BitModeOnly {
+}
