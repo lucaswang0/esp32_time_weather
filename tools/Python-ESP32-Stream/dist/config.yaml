@@ -33,56 +33,59 @@ ui:
   tray_switch_source: true
 sources:
   desktop:
-    monitor: 1
+    monitor: 2
     region: null
     crop_alignment: center
+    rotation: 0
   window:
-    window_title: 命令提示符
+    window_title: README.md (Preview) - esp32_time_weather - TraeCode CN
     crop_alignment: center
+    rotation: 0
   dashboard:
-    background: '#0B0F14'
-    bg_image: C:/Users/user/Pictures/earth.jpg
+    background: '#2A2F38'
+    bg_image: D:/mate10/壁纸/magazine-unlock-01-2.3.2024062101-6CC11DE6A95B582A75E3F71D2E4059D4.jpg
     refresh_interval_sec: 1.0
     gap: 2
+    rotation: 270
     widgets:
     - type: clock
-      enabled: false
+      enabled: true
       color: '#FFD700'
       x: null
       y: null
       w: null
-      scale: 1.0
+      scale: 1.2
     - type: cpu
       enabled: true
       color: '#00E676'
-      sparkline: false
-      x: 0
-      y: 0
-      w: 316
-      scale: 1.5
+      sparkline: true
+      x: null
+      y: null
+      w: 223
+      scale: 1.2
     - type: memory
-      enabled: false
+      enabled: true
       color: '#40C4FF'
-      x: 0
-      y: 0
-      w: 149
-      scale: 1.5
+      x: null
+      y: null
+      w: 152
+      scale: 1.2
     - type: disk
-      enabled: false
+      enabled: true
       color: '#00FFFF'
       path: C:\
-      x: 161
-      y: 0
+      x: null
+      y: null
       w: 155
-      scale: 1.3
+      scale: 1.2
     - type: net
       enabled: true
       color: '#FFFF00'
       adapter: null
-      x: 0
-      y: 41
-      w: 316
-      scale: 1.5
+      x: null
+      y: null
+      w: 225
+      scale: 1.2
     - type: temp
       enabled: true
       color: '#00FFFF'
@@ -105,7 +108,7 @@ sources:
         lhm:/vram/data/3: false
         lhm:/vram/load/1: false
         lhm:/ram/data/0: false
-        lhm:/ram/data/1: true
+        lhm:/ram/data/1: false
         lhm:/gpu-nvidia/0/temperature/0: true
         lhm:/ram/load/0: false
         lhm:/gpu-nvidia/0/clock/0: false
@@ -163,12 +166,68 @@ sources:
         lhm:/hdd/0/load/51: false
         lhm:/hdd/0/throughput/55: false
         lhm:/hdd/0/throughput/54: false
-      x: 2
-      y: 67
+        lhm:/intelcpu/0/clock/4: false
+        lhm:/intelcpu/0/clock/3: false
+        lhm:/intelcpu/0/clock/2: false
+        lhm:/intelcpu/0/clock/1: false
+        lhm:/intelcpu/0/temperature/10: false
+        lhm:/intelcpu/0/temperature/9: false
+        lhm:/intelcpu/0/temperature/8: false
+        lhm:/intelcpu/0/temperature/7: false
+        lhm:/intelcpu/0/temperature/5: false
+        lhm:/intelcpu/0/temperature/4: false
+        lhm:/intelcpu/0/temperature/3: false
+        lhm:/intelcpu/0/temperature/2: false
+        lhm:/intelcpu/0/temperature/1: false
+        lhm:/intelcpu/0/temperature/0: false
+        lhm:/intelcpu/0/voltage/0: false
+        lhm:/intelcpu/0/voltage/2: false
+        lhm:/intelcpu/0/voltage/3: false
+        lhm:/intelcpu/0/voltage/1: false
+        lhm:/intelcpu/0/voltage/4: false
+        lhm:/intelcpu/0/clock/0: false
+        lhm:/memory/dimm/0/timing/20: false
+        lhm:/memory/dimm/0/timing/21: false
+        lhm:/memory/dimm/0/timing/22: false
+        lhm:/memory/dimm/0/timing/24: false
+        lhm:/memory/dimm/0/timing/25: false
+        lhm:/memory/dimm/0/timing/23: false
+        lhm:/memory/dimm/0/timing/27: false
+        lhm:/memory/dimm/0/timing/28: false
+        lhm:/memory/dimm/0/timing/26: false
+        lhm:/memory/dimm/0/timing/29: false
+        lhm:/memory/dimm/0/timing/30: false
+        lhm:/memory/dimm/0/timing/31: false
+        lhm:/memory/dimm/0/timing/32: false
+        lhm:/memory/dimm/0/timing/33: false
+        lhm:/memory/dimm/0/timing/36: false
+        lhm:/memory/dimm/0/timing/34: false
+        lhm:/memory/dimm/0/timing/35: false
+        lhm:/memory/dimm/0/data/50: false
+        lhm:/memory/dimm/2/timing/20: false
+        lhm:/memory/dimm/2/timing/22: false
+        lhm:/memory/dimm/2/timing/21: false
+        lhm:/memory/dimm/2/timing/23: false
+        lhm:/memory/dimm/2/timing/24: false
+        lhm:/memory/dimm/2/timing/25: false
+        lhm:/memory/dimm/2/timing/26: false
+        lhm:/memory/dimm/2/timing/27: false
+        lhm:/memory/dimm/2/timing/28: false
+        lhm:/memory/dimm/2/timing/29: false
+        lhm:/memory/dimm/2/timing/30: false
+        lhm:/memory/dimm/2/timing/31: false
+        lhm:/memory/dimm/2/timing/32: false
+        lhm:/memory/dimm/2/timing/33: false
+        lhm:/memory/dimm/2/timing/34: false
+        lhm:/memory/dimm/2/timing/35: false
+        lhm:/memory/dimm/2/data/50: false
+        lhm:/memory/dimm/2/timing/36: false
+      x: null
+      y: null
       w: null
-      scale: 1.5
+      scale: 1.2
     - type: uptime
-      enabled: false
+      enabled: true
       color: '#FFFFFF'
       x: null
       y: null
@@ -180,7 +239,7 @@ sources:
       x: null
       y: null
       w: null
-      scale: 1.0
+      scale: 1.2
     - type: custom_text
       enabled: false
       color: '#FFFFFF'

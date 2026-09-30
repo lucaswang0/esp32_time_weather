@@ -21,11 +21,13 @@ def build_source(mode: str, cfg: dict) -> FrameSource:
     if mode == "desktop":
         sc = cfg["sources"]["desktop"]
         return DesktopSource(res, sc.get("monitor", 0),
-                             sc.get("region"), sc.get("crop_alignment", "center"))
+                             sc.get("region"), sc.get("crop_alignment", "center"),
+                             sc.get("rotation", 0))
     if mode == "window":
         sc = cfg["sources"]["window"]
         return WindowSource(res, sc.get("window_title", ""),
-                            sc.get("crop_alignment", "center"))
+                            sc.get("crop_alignment", "center"),
+                            sc.get("rotation", 0))
     if mode == "dashboard":
         return DashboardSource(res, cfg["sources"]["dashboard"])
     raise ValueError(f"未知画面源模式: {mode}")

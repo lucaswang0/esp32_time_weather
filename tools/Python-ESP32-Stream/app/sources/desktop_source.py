@@ -30,11 +30,13 @@ class DesktopSource(FrameSource):
     """桌面捕获：monitor=显示器序号；region=物理像素矩形或 None（整屏）。"""
 
     def __init__(self, resolution: tuple[int, int], monitor: int = 0,
-                 region: dict | None = None, alignment: str = "center"):
+                 region: dict | None = None, alignment: str = "center",
+                 rotation: int = 0):
         super().__init__(resolution)
         self.monitor_index = monitor
         self.region = region
         self.alignment = alignment
+        self.rotation = rotation
         self._sct = None
 
     def open(self) -> None:
@@ -63,7 +65,8 @@ class DesktopSource(FrameSource):
         except Exception as e:
             log.warning("桌面抓取失败: %s", e)
             return False
-        canvas.paste(fit_crop(shot, canvas.size, self.alignment), (0, 0))
+        canvas.paste(
+            fit_crop(shot, canvas.size, self.alignment, self.rotation), (0, 0))
         return True
 
     def close(self) -> None:

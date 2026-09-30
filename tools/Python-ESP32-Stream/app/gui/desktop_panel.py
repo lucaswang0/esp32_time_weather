@@ -41,6 +41,12 @@ class DesktopPanel(ctk.CTkFrame):
         self._align = ctk.StringVar(value=sc.get("crop_alignment", "center"))
         ctk.CTkSegmentedButton(box, values=["left", "center", "right"],
                                variable=self._align).pack(fill="x", padx=10)
+        ctk.CTkLabel(box, text="旋转").pack(anchor="w", padx=10, pady=(8, 0))
+        self._rot = ctk.StringVar(value=str(sc.get("rotation", 0)))
+        ctk.CTkSegmentedButton(box, values=["0", "90", "180", "270"],
+                               variable=self._rot,
+                               command=self._refresh_preview).pack(
+            fill="x", padx=10)
         self._build_region(box, sc)
         ctk.CTkButton(box, text="应用并切换到桌面",
                       command=self.apply).pack(fill="x", padx=10, pady=14)
@@ -84,7 +90,8 @@ class DesktopPanel(ctk.CTkFrame):
                self.cfg["video"]["target_height"])
         idx = next((m["index"] for m in self._mons
                     if m["label"] == self._mon_var.get()), 0)
-        return DesktopSource(res, idx, self._read_region(), self._align.get())
+        return DesktopSource(res, idx, self._read_region(), self._align.get(),
+                             int(self._rot.get()))
 
     def _refresh_preview(self, *_args) -> None:
         if self._preview and self._preview.is_running:
@@ -103,6 +110,7 @@ class DesktopPanel(ctk.CTkFrame):
                               if m["label"] == self._mon_var.get()), 0)
         sc["region"] = region
         sc["crop_alignment"] = self._align.get()
+        sc["rotation"] = int(self._rot.get())
         self._on_apply("desktop")
 
     def on_show(self) -> None:

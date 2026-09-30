@@ -90,12 +90,23 @@ _clr_loaded = False
 _lhm_computer = None
 _lhm_available = False
 _lhm_init_error: str | None = None
+# PawnIO 内核驱动状态：True/False=已检测，None=尚未检测（未加载 LHM DLL）
+_pawnio_installed: bool | None = None
 
 
 def set_dll_path(path: str | None) -> None:
     """设置 LHM DLL 路径（在首次采集前调用）。"""
     global _dll_path
     _dll_path = path
+
+
+def pawnio_installed() -> bool | None:
+    """PawnIO 内核驱动是否已安装；None 表示尚未检测。
+
+    LHM 0.9.4+ 用 PawnIO 取代了 WinRing0，未安装时 CPU/主板温度等
+    依赖内核驱动的传感器不会出现在采集结果里，且不报任何错误。
+    """
+    return _pawnio_installed
 
 
 def _find_dll() -> str | None:
@@ -106,9 +117,28 @@ def _find_dll() -> str | None:
     return None
 
 
+def _detect_pawnio() -> None:
+    """检测 PawnIO 内核驱动（在 LHM 程序集加载后调用）。"""
+    global _pawnio_installed
+    version = ""
+    try:
+        from LibreHardwareMonitor.PawnIo import PawnIo
+        _pawnio_installed = bool(PawnIo.IsInstalled)
+        if _pawnio_installed:
+            version = str(PawnIo.Version)
+    except Exception:
+        _pawnio_installed = None
+    if _pawnio_installed:
+        log.info("PawnIO 内核驱动已安装: %s", version)
+    elif _pawnio_installed is False:
+        log.warning("未安装 PawnIO：CPU/主板温度等依赖内核驱动的传感器不可用，"
+                    "请安装 https://pawnio.eu/ 后重启本程序")
+
+
 def _init_lhm() -> bool:
     """加载 LHM DLL 并初始化 Computer 实例。成功返回 True。"""
     global _clr_loaded, _lhm_computer, _lhm_available, _lhm_init_error
+    global _pawnio_installed
     if _lhm_available:
         return True
     if _lhm_init_error:
@@ -127,6 +157,7 @@ def _init_lhm() -> bool:
         clr.AddReference("LibreHardwareMonitorLib")
         _clr_loaded = True
         from LibreHardwareMonitor import Hardware
+        _detect_pawnio()
         computer = Hardware.Computer()
         computer.IsCpuEnabled = True
         computer.IsGpuEnabled = True

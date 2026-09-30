@@ -10,6 +10,7 @@ from .paths import CONFIG_PATH
 
 VALID_SOURCES = ("desktop", "window", "dashboard")
 VALID_ALIGN = ("left", "center", "right")
+VALID_ROTATION = (0, 90, 180, 270)
 
 
 def _default_widgets() -> list[dict[str, Any]]:
@@ -79,13 +80,16 @@ def default_config() -> dict[str, Any]:
             "tray_switch_source": True,
         },
         "sources": {
-            "desktop": {"monitor": 0, "region": None, "crop_alignment": "center"},
-            "window": {"window_title": "任务管理器", "crop_alignment": "left"},
+            "desktop": {"monitor": 0, "region": None, "crop_alignment": "center",
+                        "rotation": 0},
+            "window": {"window_title": "任务管理器", "crop_alignment": "left",
+                       "rotation": 0},
             "dashboard": {
                 "background": "#0B0F14",
                 "bg_image": None,
                 "refresh_interval_sec": 1.0,
                 "gap": 2,
+                "rotation": 0,
                 "widgets": _default_widgets(),
             },
         },
@@ -152,6 +156,15 @@ def validate(cfg: dict[str, Any]) -> list[str]:
         align = cfg["sources"][sec].get("crop_alignment")
         if align not in VALID_ALIGN:
             cfg["sources"][sec]["crop_alignment"] = "center"
+    for sec in VALID_SOURCES:
+        try:
+            rot = int(cfg["sources"][sec].get("rotation", 0))
+        except (TypeError, ValueError):
+            rot = 0
+        if rot not in VALID_ROTATION:
+            warnings.append(f"{sec}.rotation 非法，回退 0")
+            rot = 0
+        cfg["sources"][sec]["rotation"] = rot
     wb = cfg["video"].get("wb_scale")
     if not (isinstance(wb, list) and len(wb) == 3):
         warnings.append("wb_scale 非法，回退 [1,1,1]")

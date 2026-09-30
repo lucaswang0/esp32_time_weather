@@ -9,8 +9,10 @@ import tkinter.colorchooser as cc
 import tkinter.filedialog as fd
 from PIL import ImageDraw
 
+from ..sources.base import rotated_size
 from ..sources.dashboard_source import (DashboardSource,
                                         compute_layout, _temp_monitor)
+from ..sources.temperatures import pawnio_installed
 from ..sources.widgets import list_disk_paths, list_net_adapters
 from .preview import PreviewPlayer
 
@@ -194,18 +196,27 @@ class DashboardPanel(ctk.CTkFrame):
                 self._render_temp_sensors(sensors)
                 # 传感器行数变化会改变组件高度，刷新越界/重合警告
                 self._update_warning()
-            if keys:
-                self._temp_hint.configure(
-                    text=f"{len(keys)} 个传感器（温度/电压/风扇/功耗等；"
-                         "CPU温度/主板电压需以管理员运行本程序）",
-                    text_color="#8AB4F8")
-            elif _temp_monitor.has_scanned:
-                self._temp_hint.configure(
-                    text="未发现传感器：显卡需 NVIDIA 驱动；CPU/主板/硬盘温度需以"
-                         "管理员运行本程序以加载 LibreHardwareMonitor",
-                    text_color="#FF5252")
+            self._update_temp_hint(keys)
         if self._temp_poll_id is not None:
             self._temp_poll_id = self.after(1000, self._poll_temp)
+
+    def _update_temp_hint(self, keys: list[str]) -> None:
+        """提示扫描结果；缺 PawnIO 时直接说明原因（LHM 0.9.4+ 已弃用 WinRing0）。"""
+        missing = pawnio_installed() is False
+        if keys and not missing:
+            self._temp_hint.configure(
+                text=f"{len(keys)} 个传感器（温度/电压/风扇/功耗等）",
+                text_color="#8AB4F8")
+        elif missing:
+            self._temp_hint.configure(
+                text="未检测到 PawnIO 内核驱动：CPU/主板温度等不可用，"
+                     "请安装 https://pawnio.eu 并以管理员身份运行本程序",
+                text_color="#FF5252")
+        elif _temp_monitor.has_scanned:
+            self._temp_hint.configure(
+                text="未发现传感器：请以管理员身份运行本程序；CPU/主板温度"
+                     "还需安装 PawnIO 内核驱动（https://pawnio.eu）",
+                text_color="#FF5252")
 
     def _render_temp_sensors(self, sensors: list[dict]) -> None:
         """重建传感器复选框（选中状态存 temp widget 的 temp_enabled）。"""
@@ -259,6 +270,15 @@ class DashboardPanel(ctk.CTkFrame):
         gap_entry.bind("<Return>", lambda *_: self._apply_gap())
         ctk.CTkButton(row2, text="自动排列全部", width=100,
                       command=self._auto_arrange).pack(side="left", padx=8)
+        row3 = ctk.CTkFrame(box, fg_color="transparent")
+        row3.pack(fill="x", padx=8, pady=(0, 6))
+        ctk.CTkLabel(row3, text="旋转").pack(side="left")
+        self._rot = ctk.StringVar(
+            value=str(self.cfg["sources"]["dashboard"].get("rotation", 0)))
+        ctk.CTkSegmentedButton(row3, values=["0", "90", "180", "270"],
+                               variable=self._rot, width=180,
+                               command=lambda *_: self._sync_preview()).pack(
+            side="left", padx=6)
         ctk.CTkButton(box, text="保存并切换到仪表盘",
                       command=self.apply).pack(fill="x", padx=8, pady=(0, 8))
 
@@ -268,12 +288,16 @@ class DashboardPanel(ctk.CTkFrame):
         return os.path.basename(self._bg_image)[:14]
 
     def _build_preview(self) -> None:
-        res = (self.cfg["video"]["target_width"],
-               self.cfg["video"]["target_height"])
-        self._preview = PreviewPlayer(self, res, scale=2)
+        self._preview = PreviewPlayer(self, self._layout_dims(), scale=2)
         self._preview.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
         self._preview.set_handlers(self._drag_down, self._drag_move, None)
         self._preview.set_annotate(self._annotate)
+
+    def _layout_dims(self) -> tuple[int, int]:
+        """当前旋转下的布局分辨率（90/270 时宽高互换，与预览画布一致）。"""
+        return rotated_size(
+            (self.cfg["video"]["target_width"],
+             self.cfg["video"]["target_height"]), int(self._rot.get()))
 
     # ---------- 拖拽 ----------
 
@@ -338,8 +362,7 @@ class DashboardPanel(ctk.CTkFrame):
             return
         idx = self._drag["idx"]
         w = self._widgets[idx]
-        cw, ch = (self.cfg["video"]["target_width"],
-                  self.cfg["video"]["target_height"])
+        cw, ch = self._layout_dims()
         if self._drag["mode"] == "resize":
             rect = self._find_rect(idx)
             base_x = rect["x"] if rect else 0
@@ -352,7 +375,10 @@ class DashboardPanel(ctk.CTkFrame):
         self._preview.refresh_now()
 
     def _annotate(self, image) -> None:
-        """选中组件画黄框 + 右边缘拉伸手柄。"""
+        """选中组件画黄框 + 右边缘拉伸手柄。
+
+        预览画布即布局画布（尺寸随旋转互换），坐标 1:1，无需再做变换。
+        """
         if self._selected is None:
             return
         rect = self._find_rect(self._selected)
@@ -366,9 +392,19 @@ class DashboardPanel(ctk.CTkFrame):
 
     # ---------- 编辑动作 ----------
 
+    def _current_refresh(self) -> float:
+        """读取刷新间隔输入，非法时回退到已保存配置的值。"""
+        try:
+            return float(self._refresh.get().strip())
+        except (ValueError, TypeError):
+            return float(self.cfg["sources"]["dashboard"]
+                         .get("refresh_interval_sec", 1.0))
+
     def _temp_dash_cfg(self) -> dict:
         return {"background": self._bg, "bg_image": self._bg_image,
-                "refresh_interval_sec": 1.0, "gap": self._gap,
+                "refresh_interval_sec": self._current_refresh(),
+                "gap": self._gap,
+                "rotation": int(self._rot.get()),
                 "widgets": self._widgets}
 
     def _apply_gap(self) -> None:
@@ -435,6 +471,7 @@ class DashboardPanel(ctk.CTkFrame):
             source = self._preview.source
             if isinstance(source, DashboardSource):
                 source.update_config(self._temp_dash_cfg())
+                self._preview.set_resolution(source.layout_size)
                 self._update_warning()
 
     def _toggle(self, i: int, var: ctk.BooleanVar) -> None:
@@ -484,8 +521,7 @@ class DashboardPanel(ctk.CTkFrame):
         self._sync_preview()
 
     def _update_warning(self) -> None:
-        width, height = (self.cfg["video"]["target_width"],
-                         self.cfg["video"]["target_height"])
+        width, height = self._layout_dims()
         rects = compute_layout(self._widgets, width, height, self._gap)
         over = [r for r in rects
                 if r["y"] + r["h"] > height or r["x"] + r["w"] > width]
@@ -499,17 +535,19 @@ class DashboardPanel(ctk.CTkFrame):
             self._warn.configure(text="")
 
     def apply(self) -> None:
-        """校验刷新间隔并写回仪表盘配置。"""
-        try:
-            interval = float(self._refresh.get().strip())
-        except ValueError:
-            self._warn.configure(text="⚠ 刷新间隔必须是数字（秒）")
-            return
+        """校验刷新间隔并写回仪表盘配置。
+
+        刷新间隔非法时回退到已保存值并重置输入框，确保配置一定能保存并切换，
+        避免因输入框为空导致"点了保存但画面仍是旧版本"的假象。
+        """
+        interval = self._current_refresh()
+        self._refresh.set(f"{interval:.1f}")
         self._apply_gap()
         self.cfg["sources"]["dashboard"] = {
             "background": self._bg, "bg_image": self._bg_image,
             "refresh_interval_sec": max(0.2, interval),
             "gap": self._gap,
+            "rotation": int(self._rot.get()),
             "widgets": deepcopy(self._widgets)}
         self._on_apply("dashboard")
 
@@ -519,6 +557,7 @@ class DashboardPanel(ctk.CTkFrame):
             (self.cfg["video"]["target_width"],
              self.cfg["video"]["target_height"]), self._temp_dash_cfg()))
         self._preview.start()
+        self._preview.set_resolution(self._preview.source.layout_size)
         # 重置温度列表（预览源是新建的，等待后台扫描）
         self._temp_rendered_keys = []
         if self._temp_hint:

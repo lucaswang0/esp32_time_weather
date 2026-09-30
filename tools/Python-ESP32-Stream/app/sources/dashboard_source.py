@@ -1,4 +1,7 @@
-"""仪表盘帧源：按刷新间隔采集 psutil 指标并渲染缓存帧，推流帧直接贴缓存。
+"""仪表盘帧源：按刷新间隔采集 psutil 指标并渲染缓存帧。
+
+布局画布尺寸随 rotation 互换（90/270 为竖屏），推流时旋转回目标分辨率，
+预览则直接输出布局画布，保证编辑坐标与画面 1:1。
 
 布局：组件 x/y 均为 null 时按顺序自动纵向排列；任一坐标填了整数则
 绝对定位（x/y 可为单边）。背景支持纯色或本地图片（等比裁剪填充）。
@@ -16,7 +19,7 @@ import psutil
 from PIL import Image, ImageDraw, ImageOps
 
 from ..paths import APP_DIR
-from .base import FrameSource
+from .base import (FrameSource, normalize_rotation, rotate_cw, rotated_size)
 from .temperatures import TemperatureMonitor
 from .widgets import MARGIN_X, GAP_Y, build_widget, hexcolor, set_temp_provider
 
@@ -98,7 +101,7 @@ class DashboardSource(FrameSource):
         super().__init__(resolution)
         self._lock = threading.Lock()
         self._configure(dash_cfg)
-        self._cache = Image.new("RGB", resolution,
+        self._cache = Image.new("RGB", self._layout,
                                 hexcolor(self._dash_cfg.get("background")))
         self._rects: list[dict] = []
         self._last_sample = 0.0
@@ -118,6 +121,9 @@ class DashboardSource(FrameSource):
                          if c.get("enabled", True)]
         self._widgets = [w for w in self._widgets if w is not None]
         self._refresh = max(0.2, float(dash_cfg.get("refresh_interval_sec", 1.0)))
+        self._rotation = normalize_rotation(dash_cfg.get("rotation", 0))
+        # 布局分辨率随旋转互换（90/270 -> 竖屏），推流前再旋转回目标分辨率
+        self._layout = rotated_size(self.resolution, self._rotation)
         self._net_adapter = next(
             (w.cfg.get("adapter") for w in self._widgets
              if w.cfg.get("type") == "net" and w.cfg.get("adapter")), None)
@@ -126,12 +132,21 @@ class DashboardSource(FrameSource):
         """热更新仪表盘配置（组件/颜色/位置/背景），下一次采集生效。"""
         with self._lock:
             self._configure(dash_cfg)
+            if self._cache.size != self._layout:
+                self._cache = Image.new(
+                    "RGB", self._layout,
+                    hexcolor(self._dash_cfg.get("background")))
             self._last_sample = 0.0
 
     def get_rects(self) -> list[dict]:
         """返回最近一帧各组件的画布矩形 [{cfg_index,x,y,w,h,type}]（供拖拽命中）。"""
         with self._lock:
             return list(self._rects)
+
+    @property
+    def layout_size(self) -> tuple[int, int]:
+        """当前旋转下的布局分辨率（预览与坐标命中所用的画布尺寸）。"""
+        return self._layout
 
     @property
     def temp_sensors(self) -> list[dict]:
@@ -220,27 +235,27 @@ class DashboardSource(FrameSource):
         path = self._resolve_bg_path()
         if not path:
             self._bg_cache, self._bg_cache_key = None, None
-            return Image.new("RGB", self.resolution, bg)
+            return Image.new("RGB", self._layout, bg)
         try:
             mtime = os.path.getmtime(path)
         except OSError:
-            return Image.new("RGB", self.resolution, bg)
-        key = (path, mtime)
+            return Image.new("RGB", self._layout, bg)
+        key = (path, mtime, self._layout)
         if self._bg_cache_key != key or self._bg_cache is None:
             try:
                 with Image.open(path) as f:
-                    self._bg_cache = cover_image(f, self.resolution)
+                    self._bg_cache = cover_image(f, self._layout)
                 self._bg_cache_key = key
             except Exception as e:
                 log.warning("背景图片加载失败 %s: %s", path, e)
-                return Image.new("RGB", self.resolution, bg)
+                return Image.new("RGB", self._layout, bg)
         return self._bg_cache.copy()
 
     def _render(self, metrics: dict) -> None:
         """按组件布局重绘缓存帧，并记录命中矩形（碰撞消解，禁止重合）。"""
         img = self._background()
         draw = ImageDraw.Draw(img)
-        width, height = self.resolution
+        width, height = self._layout
         with self._lock:
             widget_cfgs = list(self._dash_cfg.get("widgets", []))
             gap = int(self._dash_cfg.get("gap", GAP_Y))
@@ -255,15 +270,26 @@ class DashboardSource(FrameSource):
         self._cache = img
         self._rects = rects
 
-    def draw_frame(self, canvas: Image.Image) -> bool:
-        """到刷新间隔就采集重绘；无论与否都把缓存贴到推流 canvas。"""
+    def _maybe_refresh(self) -> None:
+        """到刷新间隔就重新采集渲染缓存帧。"""
         now = time.monotonic()
-        if now - self._last_sample >= self._refresh:
-            try:
-                self._render(self._collect_metrics())
-            except Exception as e:
-                log.warning("仪表盘采集失败: %s", e)
-            self._last_sample = now
+        if now - self._last_sample < self._refresh:
+            return
+        try:
+            self._render(self._collect_metrics())
+        except Exception as e:
+            log.warning("仪表盘采集失败: %s", e)
+        self._last_sample = now
+
+    def draw_frame(self, canvas: Image.Image) -> bool:
+        """推流：布局缓存按旋转角转回目标分辨率后贴入。"""
+        self._maybe_refresh()
+        canvas.paste(rotate_cw(self._cache, self._rotation), (0, 0))
+        return True
+
+    def draw_preview(self, canvas: Image.Image) -> bool:
+        """预览：贴未旋转的布局缓存，使编辑坐标系与画布 1:1。"""
+        self._maybe_refresh()
         canvas.paste(self._cache, (0, 0))
         return True
 

@@ -97,19 +97,21 @@ onefile 首次启动需数秒解压，属正常现象；如被杀毒软件误报
 
 ## 温度传感器说明（Windows）
 
-在"仪表盘→温度"卡片点"扫描温度传感器"，自动探测可用温度源，逐个勾选显示。
-采集后端（无需额外安装，自动选择）：
+在"仪表盘→传感器"卡片点"扫描传感器"，自动探测可用传感器，逐个勾选显示。
+采集后端按优先级自动选择：
 
-| 后端 | 覆盖 | 权限要求 |
+| 后端 | 覆盖 | 前置条件 |
 |---|---|---|
-| nvidia-smi | NVIDIA 显卡温度（多卡逐个列出） | 无需管理员 |
+| 内置 LibreHardwareMonitorLib.dll（进程内直读，首选） | CPU/主板/显卡/硬盘/内存 全部传感器（温度/电压/风扇/功耗/负载…） | **必须安装 [PawnIO](https://pawnio.eu/) 内核驱动**：LHM 0.9.4+ 已用 PawnIO 取代 WinRing0，缺驱动时 CPU/主板温度等传感器不会出现且不报错；建议以**管理员身份**运行本程序 |
+| LibreHardwareMonitor / OpenHardwareMonitor (WMI) | 同上，需 LHM/OHM 本体在后台运行 | LHM/OHM 需以管理员运行；检测到后自动优先使用 |
 | MSAcpi 热区 (WMI) | 部分主板/笔记本的 CPU 封装近似温度 | 无需管理员 |
 | 存储可靠性计数器 (WMI) | 硬盘/NVMe 温度 | 部分磁盘需管理员 |
-| LibreHardwareMonitor / OpenHardwareMonitor (WMI) | CPU/主板/显卡/硬盘全部真实温度 | 需以**管理员身份**运行 LHM/OHM 并保持后台运行；检测到后自动优先使用 |
+| nvidia-smi | NVIDIA 显卡温度（多卡逐个列出） | 无需管理员 |
 
-提示：扫不到 CPU/主板温度是 Windows 平台限制（psutil 在 Windows 无温度 API），
-以管理员身份运行 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
-后即可获取；勾选状态保存在温度组件的 `temp_enabled`（key→bool，缺省=显示）。
+提示：psutil 在 Windows 无温度 API，扫不到 CPU/主板温度时按顺序排查——
+① 是否已安装 PawnIO（[PawnIO_setup.exe](https://github.com/namazso/PawnIO.Setup/releases/latest/download/PawnIO_setup.exe)，
+装完需重启本程序）；② 是否以管理员身份运行本程序。
+勾选状态保存在温度组件的 `temp_enabled`（key→bool，缺省=显示）。
 
 ## 常见问题
 

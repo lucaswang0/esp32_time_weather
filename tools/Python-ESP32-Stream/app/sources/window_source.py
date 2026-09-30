@@ -35,10 +35,11 @@ class WindowSource(FrameSource):
     """按窗口标题（子串匹配，取第一个结果）捕获指定窗口。"""
 
     def __init__(self, resolution: tuple[int, int], window_title: str,
-                 alignment: str = "center"):
+                 alignment: str = "center", rotation: int = 0):
         super().__init__(resolution)
         self.window_title = window_title or ""
         self.alignment = alignment
+        self.rotation = rotation
         self._sct = None
         self._missing_logged = False
 
@@ -75,7 +76,8 @@ class WindowSource(FrameSource):
         except Exception as e:
             log.warning("窗口抓取失败: %s", e)
             return False
-        canvas.paste(fit_crop(shot, canvas.size, self.alignment), (0, 0))
+        canvas.paste(
+            fit_crop(shot, canvas.size, self.alignment, self.rotation), (0, 0))
         return True
 
     def close(self) -> None:

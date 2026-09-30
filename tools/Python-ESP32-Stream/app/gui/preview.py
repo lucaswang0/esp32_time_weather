@@ -98,6 +98,17 @@ class PreviewPlayer(ctk.CTkFrame):
             log.warning("预览源打开失败: %s", e)
             self._hint.configure(text=f"预览源不可用: {e}")
 
+    def set_resolution(self, resolution: tuple[int, int]) -> None:
+        """切换预览画布分辨率（仪表盘旋转导致宽高互换时调用）。"""
+        if resolution == self._res:
+            return
+        self._res = resolution
+        self._scale = float(self._max_scale)
+        self._img = None
+        self._label.configure(width=int(resolution[0] * self._scale),
+                              height=int(resolution[1] * self._scale))
+        self.refresh_now()
+
     def refresh_now(self) -> None:
         """立即重绘一帧（拖拽时保证位置即时反馈）。"""
         if self._running:
@@ -177,7 +188,7 @@ class PreviewPlayer(ctk.CTkFrame):
         self._label.configure(text="")
         canvas = Image.new("RGB", self._res, (0, 0, 0))
         try:
-            ok = self._source.draw_frame(canvas)
+            ok = self._source.draw_preview(canvas)
         except Exception as e:
             self._hint.configure(text=f"取帧失败: {e}")
             return

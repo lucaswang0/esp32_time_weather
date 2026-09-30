@@ -46,6 +46,15 @@ class WindowPanel(ctk.CTkFrame):
         ctk.CTkSegmentedButton(
             align_box, values=["left", "center", "right"],
             variable=self._align, width=160).pack(side="right")
+        rot_box = ctk.CTkFrame(box, fg_color="transparent")
+        rot_box.pack(fill="x", padx=8, pady=(4, 0))
+        ctk.CTkLabel(rot_box, text="旋转").pack(side="left")
+        self._rot = ctk.StringVar(
+            value=str(self.cfg["sources"]["window"].get("rotation", 0)))
+        ctk.CTkSegmentedButton(
+            rot_box, values=["0", "90", "180", "270"],
+            variable=self._rot, width=160,
+            command=lambda *_: self._refresh_preview()).pack(side="right")
         ctk.CTkButton(box, text="应用并切换到指定窗口",
                       command=self.apply).pack(fill="x", padx=8, pady=10)
 
@@ -84,7 +93,8 @@ class WindowPanel(ctk.CTkFrame):
     def _make_source(self) -> WindowSource:
         res = (self.cfg["video"]["target_width"],
                self.cfg["video"]["target_height"])
-        return WindowSource(res, self._selected.get(), self._align.get())
+        return WindowSource(res, self._selected.get(), self._align.get(),
+                            int(self._rot.get()))
 
     def _refresh_preview(self) -> None:
         if self._preview and self._preview.is_running:
@@ -97,6 +107,7 @@ class WindowPanel(ctk.CTkFrame):
             return
         self.cfg["sources"]["window"]["window_title"] = title
         self.cfg["sources"]["window"]["crop_alignment"] = self._align.get()
+        self.cfg["sources"]["window"]["rotation"] = int(self._rot.get())
         self._on_apply("window")
 
     def on_show(self) -> None:
