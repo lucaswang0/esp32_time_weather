@@ -228,36 +228,30 @@ void TaskManager::taskWiFi() {
         if (now - _lastWiFiCheck >= WIFI_CHECK_INTERVAL) {
             _lastWiFiCheck = now;
             
-            if (_wifiManager.isAPStarted()) {
-                _wifiManager.handleClient();
-                if (_wifiManager.isConnected()) {
-                    ESP_LOGI(TAG, "[TaskWiFi] WiFi connected via config portal!");
-                    _wifiManager.stopAPMode();
-                    _lastCurrentWeatherUpdate = 0;
-                    _lastForecastUpdate = 0;
-                } else if (_pageManager.current() != PageManager::PAGE_AP_MODE) {
-                    ESP_LOGI(TAG, "[TaskWiFi] Left AP page, stopping AP and reconnecting WiFi...");
-                    _wifiManager.stopAPMode();
-                }
-            } else if (_pageManager.current() == PageManager::PAGE_AP_MODE) {
-                ESP_LOGI(TAG, "[TaskWiFi] AP mode stopped, switching back to temp page...");
+            // WiFi 状态机统一维护：扫描可见WiFi / 断线退避重连 / 配网(SmartConfig→AP门户) / 超时禁用
+            _wifiManager.maintainConnection();
+            
+            // 门户或手动 AP 关闭后，若仍停留在 AP 页则回退到温湿度页
+            if (!_wifiManager.isAPStarted() &&
+                _pageManager.current() == PageManager::PAGE_AP_MODE) {
+                ESP_LOGI(TAG, "[TaskWiFi] AP stopped, switching back to temp page...");
                 if (xSemaphoreTake(_displayMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     _pageManager.switchTo(PageManager::PAGE_TEMP);
                     xSemaphoreGive(_displayMutex);
                 }
-            } else if (_wifiManager.isConnected()) {
-                _wifiManager.maintainConnection();
-            } else {
-                ESP_LOGI(TAG, "[TaskWiFi] WiFi not connected, attempting connection...");
-                if (_wifiManager.connect()) {
-                    ESP_LOGI(TAG, "[TaskWiFi] WiFi connection successful!");
+            }
+            
+            // 新连接成功时刷新天气
+            bool connected = _wifiManager.isConnected();
+            if (connected != _lastWifiConnected) {
+                _lastWifiConnected = connected;
+                if (connected) {
+                    ESP_LOGI(TAG, "[TaskWiFi] WiFi connected!");
                     _lastCurrentWeatherUpdate = 0;
                     _lastForecastUpdate = 0;
                 }
             }
         }
-        
-        _wifiManager.checkAPTimeout();
         
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
     }

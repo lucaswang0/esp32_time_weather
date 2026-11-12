@@ -50,6 +50,7 @@ private:
     unsigned long _lastForecastUpdate = 0;
     unsigned long _lastTempRead = 0;
     unsigned long _lastHistorySave = 0;
+    bool _lastWifiConnected = false;   // 上一次 WiFi 连接状态（用于检测新连接）
     
     // 天气状态
     bool _ipLocationDone = false;

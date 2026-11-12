@@ -197,7 +197,7 @@ void TempPage::drawSunMoon(const String& sunrise, const String& sunset, const St
         // 复用 drawWeatherIcon 全部默认参数：/icon_<code>.png，失败回退 /icon_999.png
         // 32×32 图标（与 weather icon 64×64 区分），位置 (95, 100)
         // 实际区域 95-127 / 100-132，不与 (0,105) 日出文字、(0,126) 日落文字、(225,126) 体感温度冲突
-        _display.drawWeatherIcon(97, 122, moonPhaseIcon);
+        _display.drawWeatherIcon(100, 124, moonPhaseIcon);
     }
 }
 
@@ -325,6 +325,7 @@ void TempPage::drawApparentTemp(float apparentTemp, float humidity) {
     }
     
     char tempStr[32];
-    sprintf(tempStr, "体:%.1f°%s", apparentTemp, comfort);
+    // sprintf(tempStr, "体:%.1f°%s", apparentTemp, comfort);
+    sprintf(tempStr, "体:%.1f°", apparentTemp);
     _display.drawTextWithTransparentBg(tempStr, 225, 130, COLOR_WHITE);
 }

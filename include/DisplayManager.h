@@ -47,7 +47,6 @@ public:
     DisplayManager();
     void init();
     void showConnecting();
-    void showConfigMode();
     void clearScreen();
     void fillBlackScreen();
     

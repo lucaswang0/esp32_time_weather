@@ -135,30 +135,6 @@ void DisplayManager::fillBlackScreen() {
 //     tft.unloadFont();
 // }
 
-void DisplayManager::showConfigMode() {
-    tft.fillScreen(COLOR_GRAY_LIGHT);
-    tft.fillRoundRect(30, 20, 260, 110, 6, COLOR_CARD);
-    tft.loadFont(font_small_20);
-    tft.setTextColor(COLOR_PRIMARY);
-
-    tft.setCursor(50, 30);
-    tft.print("WiFi Config Mode");
-
-    tft.setCursor(50, 60);
-    tft.setTextColor(COLOR_SUN);
-    tft.print("Connect: ESP32-Weather");
-
-    tft.setCursor(50, 85);
-    tft.setTextColor(COLOR_GRAY_LIGHT);
-    tft.print("pwd: 12345678");
-
-    tft.setCursor(50, 110);
-    tft.setTextColor(COLOR_GRAY_MID);
-    tft.print("Browser: 192.168.4.1");
-
-    tft.unloadFont();
-}
-
 void DisplayManager::fadeOut(int durationMs) {
     int steps = 10;
     int delayMs = durationMs / steps;

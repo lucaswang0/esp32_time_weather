@@ -50,9 +50,7 @@ void WiFiInfoPage::drawStaticContent(TFT_eSPI& tft) {
     tft.drawString("信号强度:", 5, 74);
     tft.drawString("Min/Free/Total:", 5, 97);
     tft.drawString("Uptime:", 5, 120);
-    tft.drawString("Version:", 5, 143);
-    tft.setTextColor(TFT_CYAN);
-    tft.drawString(APP_VERSION, 130, 143);
+    tft.drawString("芯片温度:", 5, 143);
     tft.setTextColor(COLOR_GOLD_WARM);
     // tft.drawString("长按10秒进入AP配网", 5, 180);
         // 准备要显示的文字数组
@@ -117,6 +115,11 @@ void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
     snprintf(memStr, sizeof(memStr), "%luK/%luK/%luK",
              minFree / 1024, freeHeap / 1024, totalHeap / 1024);
     _display.drawTextWithTransparentBgFont(memStr, 150, 97, TFT_WHITE, font_small_20);
+
+    // 芯片内部温度
+    char tempStr[16];
+    snprintf(tempStr, sizeof(tempStr), "%.1fC", temperatureRead());
+    _display.drawTextWithTransparentBgFont(tempStr, 130, 143, TFT_CYAN, font_small_20);
 
     tft.unloadFont();
 

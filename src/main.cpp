@@ -255,8 +255,7 @@ void setup() {
             ESP_LOGE(TAG, "NTP时间同步失败，将在任务中重试");
         }
     } else {
-        ESP_LOGE(TAG, "WiFi连接失败，开启AP配网模式");
-        wifiManager.startAPMode();
+        ESP_LOGW(TAG, "WiFi连接失败，已进入配网模式(SmartConfig→AP门户)，由 WiFi 任务维护");
     }
 
     // 启动页面管理器

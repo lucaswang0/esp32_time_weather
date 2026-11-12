@@ -1,13 +1,13 @@
 #include "WiFiManager.h"
 #include <esp_log.h>
 #include "config.h"
-#include "secrets.h"
 #include "esp_wifi.h"
 
 static const char* TAG = "WiFi";
 
 WiFiManager::WiFiManager() :
  webServer(nullptr),
+ dnsStarted(false),
  configMode(false),
  fsServerStarted(false),
  credentialCount(0),
@@ -20,7 +20,13 @@ WiFiManager::WiFiManager() :
  _initialConnected(false),
  smartConfigStarted(false),
  smartConfigDone(false),
- smartConfigStartTime(0) {
+ smartConfigStartTime(0),
+ _configModeStartTime(0),
+ _configDisabled(false),
+ _reconnectAttempts(0),
+ _reconnectWaitUntil(0),
+ _netReady(false),
+ _activeCredIndex(-1) {
 }
 
 bool WiFiManager::connect() {
@@ -31,59 +37,155 @@ bool WiFiManager::connect() {
   initialized = true;
  }
 
+ // 先扫描，仅连接“可见”的已存 WiFi
  if (autoConnect()) {
   ESP_LOGI(TAG, "STA mode connected successfully!");
-  reconnectCount = 0;
-  _initialConnected = true;
-  // startWebServer();
+  onConnected();
   return true;
  }
 
- ESP_LOGI(TAG, "STA mode connection failed, starting config portal...");
- startConfigPortal();
- startSmartConfig();
+ // 无可见的已存 WiFi（或全部失败）→ 进入配网模式（SmartConfig → AP 门户）
+ ESP_LOGI(TAG, "No visible saved WiFi, entering config mode...");
+ startConfigMode();
  return false;
 }
 
-void WiFiManager::maintainConnection() {
- if (isConfigMode()) {
-  handleClient();
-  handleSmartConfig();
-  checkAPTimeout();
+void WiFiManager::onConnected() {
+ _netReady = true;          // 置位联网就绪标志，放行联网应用
+ reconnectCount = 0;
+ _reconnectAttempts = 0;
+ _reconnectWaitUntil = 0;
+ _initialConnected = true;
+}
 
-  if (WiFi.status() == WL_CONNECTED) {
-   ESP_LOGI(TAG, "Connected via SmartConfig or Web Portal!");
-   stopSmartConfig();
-   stopAPMode();
-   configMode = false;
-   _initialConnected = true;
-   startWebServer();
+void WiFiManager::maintainConnection() {
+ // 门户（自动配网 / 手动 AP）的 Web 服务需周期性处理请求
+ handleClient();
+
+ // 手动 AP 模式（用户长按触发）：仅维持门户，优先于"禁用"判断，允许超时后手动配网
+ if (apStarted && !configMode) return;
+
+ // 配网已超时禁用：彻底关闭射频，只能重启后再配网
+ if (_configDisabled) {
+  if (WiFi.getMode() != WIFI_OFF) {
+   ESP_LOGW(TAG, "[WiFi] 配网已禁用，关闭射频（重启后可重新配网）");
+   WiFi.mode(WIFI_OFF);
   }
+  _netReady = false;
   return;
  }
 
- if (WiFi.status() != WL_CONNECTED) {
-  reconnectCount++;
-  ESP_LOGI(TAG, "\n[WiFi] Disconnected! Reconnecting...");
-
-  WiFi.disconnect();
-  delay(100);
-
-  if (autoConnect()) {
-   reconnectCount = 0;
-   startWebServer();
-  } else {
-   ESP_LOGI(TAG, "Reconnect failed, will retry later");
-   startConfigPortal();
-   startSmartConfig();
-  }
+ // 配网模式（SmartConfig → AP 门户）
+ if (isConfigMode()) {
+  handleConfigMode();
+  return;
  }
 
- handleClient();
+ // 已连接：置位联网标志并复位重连计数
+ if (WiFi.status() == WL_CONNECTED) {
+  onConnected();
+  return;
+ }
+
+ // 未连接：清除联网标志（阻止联网应用访问网络），进入退避重连
+ _netReady = false;
+ handleReconnect();
+}
+
+void WiFiManager::startConfigMode() {
+ configMode = true;
+ _configModeStartTime = millis();
+ _netReady = false;
+
+ ESP_LOGI(TAG, "[WiFi] 进入配网模式：立即开启热点门户（Captive Portal），总窗口 %lu 分钟",
+               CONFIG_MODE_TIMEOUT_MS / 60000);
+
+ // 热点优先：无凭据/连接失败时立刻开出配网热点，手机连上即可自动弹出配置页。
+ // 注意：不在此自动启用 SmartConfig —— Arduino 的 beginSmartConfig() 会强制切到
+ // WIFI_STA 并拆掉 SoftAP，与"热点立即可用"冲突（单射频无法并行）。
+ startConfigPortal();
+}
+
+void WiFiManager::handleConfigMode() {
+ unsigned long elapsed = millis() - _configModeStartTime;
+
+ // STA 已连上（门户配置生效后重启前，或已有凭据自行连上）→ 配网成功
+ if (WiFi.status() == WL_CONNECTED) {
+  ESP_LOGI(TAG, "[WiFi] 配网成功! IP: %s", WiFi.localIP().toString().c_str());
+  stopSmartConfig();
+  stopAPMode();
+  configMode = false;
+  onConnected();
+  return;
+ }
+
+ // 配网总窗口超时：关闭 WiFi，禁止再次自动配网（只能重启后配置）
+ if (elapsed >= CONFIG_MODE_TIMEOUT_MS) {
+  ESP_LOGW(TAG, "[WiFi] 配网超时（%lu 分钟），关闭 WiFi，重启后可重新配网", CONFIG_MODE_TIMEOUT_MS / 60000);
+  stopSmartConfig();
+  stopAPMode();
+  WiFi.mode(WIFI_OFF);
+  configMode = false;
+  _configDisabled = true;
+  _netReady = false;
+ }
+}
+
+void WiFiManager::handleReconnect() {
+ unsigned long now = millis();
+
+ // 5 次重试失败后的“等待期”：期间不做任何连接尝试
+ if (_reconnectWaitUntil != 0) {
+  if (now < _reconnectWaitUntil) return;
+  _reconnectWaitUntil = 0;
+  _reconnectAttempts = 0;
+ }
+
+ if (_reconnectAttempts >= RECONNECT_RETRY_MAX) {
+  ESP_LOGW(TAG, "[WiFi] 已重试 %d 次仍失败，等待 %lu 分钟后再试",
+                RECONNECT_RETRY_MAX, RECONNECT_WAIT_MS / 60000);
+  _reconnectWaitUntil = now + RECONNECT_WAIT_MS;
+  return;
+ }
+
+ _reconnectAttempts++;
+ reconnectCount++;
+ ESP_LOGI(TAG, "[WiFi] 断线重连 第 %d/%d 次", _reconnectAttempts, RECONNECT_RETRY_MAX);
+
+ // 优先重连上次成功的凭据，不重新扫描（路由器关闭时扫描无意义且耗电）
+ int idx = (_activeCredIndex >= 0 && _activeCredIndex < credentialCount) ? _activeCredIndex : 0;
+ if (connectSavedIndex(idx, RECONNECT_RETRY_INTERVAL_MS)) {
+  ESP_LOGI(TAG, "[WiFi] 重连成功! IP: %s", WiFi.localIP().toString().c_str());
+  onConnected();
+ }
+}
+
+bool WiFiManager::connectSavedIndex(int idx, unsigned long timeoutMs) {
+ if (idx < 0 || idx >= credentialCount) return false;
+
+ WiFi.mode(apStarted ? WIFI_AP_STA : WIFI_STA);
+ WiFi.begin(savedCredentials[idx].ssid.c_str(), savedCredentials[idx].password.c_str());
+ esp_wifi_set_max_tx_power(WIFI_TX_POWER_RAW);
+
+ unsigned long start = millis();
+ while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeoutMs) {
+  delay(500);
+ }
+
+ if (WiFi.status() == WL_CONNECTED) {
+  _activeCredIndex = idx;
+  ESP_LOGI(TAG, "[WiFi] SSID: %s connected", savedCredentials[idx].ssid.c_str());
+  return true;
+ }
+
+ WiFi.disconnect(false);
+ delay(100);
+ return false;
 }
 
 bool WiFiManager::isConnected() {
- return WiFi.status() == WL_CONNECTED;
+ // 唯一联网开关：未连接时为 false，阻止 TimeManager/WeatherManager 等联网应用访问网络
+ return _netReady;
 }
 
 int WiFiManager::getReconnectCount() {
@@ -112,7 +214,7 @@ const char* WiFiManager::getSSID() {
  if (WiFi.status() == WL_CONNECTED) {
   ssidStr = WiFi.SSID();
  } else {
-  ssidStr = WIFI_SSID;
+  ssidStr = "";
  }
  return ssidStr.c_str();
 }
@@ -122,6 +224,10 @@ bool WiFiManager::isAPMode() {
 }
 
 void WiFiManager::handleClient() {
+ // Captive Portal：处理 DNS 查询（把任意域名应答为 AP 地址）
+ if (dnsStarted) {
+  dnsServer.processNextRequest();
+ }
  if (webServer) {
   webServer->handleClient();
  }
@@ -130,25 +236,33 @@ void WiFiManager::handleClient() {
 void WiFiManager::startAPMode() {
  if (apStarted) return;
 
+ // 手动 AP 优先（用户长按触摸触发）：终止自动配网（SmartConfig / 配网窗口）
+ stopSmartConfig();
+ configMode = false;
+
  ESP_LOGI(TAG, "Starting AP mode...");
 
  WiFi.mode(WIFI_AP_STA);
 
  WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
- WiFi.softAP("ESP32-Weather", NULL, 1, false, 4);
+ updateApSsid();
+ WiFi.softAP(apSsid.c_str(), NULL, 1, false, 4);
 
  delay(500);
 
- ESP_LOGI(TAG, "AP IP: %s", WiFi.softAPIP());
- ESP_LOGI(TAG, "AP SSID: %s", WiFi.softAPSSID());
+ ESP_LOGI(TAG, "AP IP: %s", WiFi.softAPIP().toString().c_str());
+ ESP_LOGI(TAG, "AP SSID: %s", WiFi.softAPSSID().c_str());
 
  apStarted = true;
  apStartTime = millis();
 
+ startPortalDns();
  startWebServer();
 }
 
 void WiFiManager::stopAPMode() {
+ stopPortalDns();
+
  if (!apStarted) return;
 
  ESP_LOGI(TAG, "Stopping AP mode...");
@@ -173,17 +287,38 @@ void WiFiManager::stopWebServer() {
  fsServerStarted = false;
 }
 
-bool WiFiManager::isAPStarted() {
- return apStarted;
+void WiFiManager::startPortalDns() {
+ if (dnsStarted) {
+  dnsServer.stop();
+  dnsStarted = false;
+ }
+
+ // 把所有域名解析到热点地址，触发手机/PC 的 Captive Portal 检测
+ dnsStarted = dnsServer.start(53, "*", WiFi.softAPIP());
+ if (dnsStarted) {
+  ESP_LOGI(TAG, "[CaptivePortal] DNS 劫持已启动 -> %s", WiFi.softAPIP().toString().c_str());
+ } else {
+  ESP_LOGW(TAG, "[CaptivePortal] DNS 劫持启动失败（不影响手动打开 http://192.168.4.1/）");
+ }
 }
 
-void WiFiManager::checkAPTimeout() {
- if (!apStarted) return;
+void WiFiManager::stopPortalDns() {
+ if (!dnsStarted) return;
+ dnsServer.stop();
+ dnsStarted = false;
+ ESP_LOGI(TAG, "[CaptivePortal] DNS 劫持已停止");
+}
 
- if (apStartTime > 0 && (millis() - apStartTime) >= AP_TIMEOUT_MS) {
-  ESP_LOGW(TAG, "AP mode timeout (10 minutes), stopping AP...");
-  stopAPMode();
- }
+void WiFiManager::updateApSsid() {
+ uint8_t mac[6] = {0};
+ WiFi.macAddress(mac);
+ char buf[16];
+ snprintf(buf, sizeof(buf), "esp32-%02x%02x", mac[4], mac[5]);
+ apSsid = buf;
+}
+
+bool WiFiManager::isAPStarted() {
+ return apStarted;
 }
 
 bool WiFiManager::hasInitialConnected() const {
@@ -205,106 +340,74 @@ void WiFiManager::begin() {
 
  loadCredentials();
  ESP_LOGI(TAG, "Initialized");
+
+ // 置位后 connect() 不再重复调用 begin()，避免 Preferences 二次 begin 返回 false
+ initialized = true;
 }
 
 bool WiFiManager::autoConnect() {
- if (hasSavedCredentials()) {
-  ESP_LOGI(TAG, "Trying saved WiFi credentials...");
-
-  // 先扫描环境，优先连接可见的已保存WiFi，避免逐个盲等20秒
-  int order[MAX_WIFI_CREDENTIALS];
-  for (int i = 0; i < credentialCount; i++) order[i] = i;
-
-  WiFi.disconnect(false);
-  delay(100);
-  int found = WiFi.scanNetworks(false, false);
-  if (found > 0 && credentialCount > 1) {
-   int rssi[MAX_WIFI_CREDENTIALS];
-   for (int i = 0; i < credentialCount; i++) {
-    rssi[i] = -127;  // 未发现
-    for (int j = 0; j < found; j++) {
-     if (savedCredentials[i].ssid == WiFi.SSID(j)) {
-      rssi[i] = WiFi.RSSI(j);
-      break;
-     }
-    }
-   }
-   // 按RSSI降序简单选择排序，未发现的排在最后
-   for (int i = 0; i < credentialCount; i++) {
-    for (int j = i + 1; j < credentialCount; j++) {
-     if (rssi[order[j]] > rssi[order[i]]) {
-      int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
-     }
-    }
-   }
-  }
-  if (found >= 0) WiFi.scanDelete();
-
-  for (int oi = 0; oi < credentialCount; oi++) {
-   const int i = order[oi];
-   ESP_LOGI(TAG, " Trying SSID %d: %s", i + 1, savedCredentials[i].ssid.c_str());
-
-   WiFi.mode(apStarted ? WIFI_AP_STA : WIFI_STA);
-   WiFi.begin(savedCredentials[i].ssid.c_str(), savedCredentials[i].password.c_str());
-   esp_wifi_set_max_tx_power(WIFI_TX_POWER_RAW);
-
-   int8_t actualPower = 0;
-   if (esp_wifi_get_max_tx_power(&actualPower) == ESP_OK) {
-    ESP_LOGI(TAG, "TX power set -> readback: %d (raw, 0.25 dBm/unit) ≈ %.2f dBm",
-     actualPower, actualPower * 0.25f);
-   } else {
-    ESP_LOGI(TAG, "Failed to read TX power");
-   }
-
-   int attempts = 0;
-   while (WiFi.status() != WL_CONNECTED && attempts < 40) {
-    delay(500);
-    ESP_LOGI(TAG, ".");
-    attempts++;
-   }
-
-   if (WiFi.status() == WL_CONNECTED) {
-    ESP_LOGI(TAG, "\n[WiFi] Saved WiFi connected!");
-    ESP_LOGI(TAG, " IP: %s", WiFi.localIP().toString().c_str());
-    return true;
-   }
-
-   ESP_LOGI(TAG, "\n[WiFi] SSID failed, trying next...");
-   WiFi.disconnect(false);
-   delay(100);
-  }
+ if (!hasSavedCredentials()) {
+  ESP_LOGW(TAG, "[WiFi] 无已存凭据，跳过自动连接");
+  return false;
  }
 
- ESP_LOGI(TAG, "Trying default WiFi: %s", WIFI_SSID);
+ ESP_LOGI(TAG, "Trying saved WiFi credentials...");
 
- WiFi.mode(apStarted ? WIFI_AP_STA : WIFI_STA);
- WiFi.begin(WIFI_SSID, WIFI_PASS);
- esp_wifi_set_max_tx_power(WIFI_TX_POWER_RAW);
-
- int8_t actualPower = 0;
- if (esp_wifi_get_max_tx_power(&actualPower) == ESP_OK) {
-  ESP_LOGI(TAG, "TX power set -> readback: %d (raw, 0.25 dBm/unit) ≈ %.2f dBm",
-   actualPower, actualPower * 0.25f);
- } else {
-  ESP_LOGI(TAG, "Failed to read TX power");
- }
-
- int attempts = 0;
- while (WiFi.status() != WL_CONNECTED && attempts < 40) {
-  delay(500);
-  ESP_LOGI(TAG, ".");
-  attempts++;
- }
-
- if (WiFi.status() == WL_CONNECTED) {
-  ESP_LOGI(TAG, "\n[WiFi] Default WiFi connected!");
-  ESP_LOGI(TAG, " IP: %s", WiFi.localIP().toString().c_str());
-  return true;
- }
-
- ESP_LOGI(TAG, "\n[WiFi] Default WiFi failed!");
+ // 先扫描环境：只连接“可见”的已存 WiFi，避免对不可见凭据盲等 20s
  WiFi.disconnect(false);
  delay(100);
+ int found = WiFi.scanNetworks(false, false);
+
+ // 扫描本身失败 → 退化为逐个尝试已存凭据（保留容错）
+ if (found < 0) {
+  ESP_LOGW(TAG, "[WiFi] 扫描失败(%d)，逐个尝试已存凭据", found);
+  for (int i = 0; i < credentialCount; i++) {
+   if (connectSavedIndex(i, WIFI_CONNECT_TIMEOUT_MS)) return true;
+  }
+  return false;
+ }
+
+ // 挑出可见的已存凭据，记录 RSSI
+ int rssi[MAX_WIFI_CREDENTIALS];
+ int order[MAX_WIFI_CREDENTIALS];
+ int visible = 0;
+ for (int i = 0; i < credentialCount; i++) {
+  rssi[i] = -127;  // 未发现
+  for (int j = 0; j < found; j++) {
+   if (savedCredentials[i].ssid == WiFi.SSID(j)) {
+    rssi[i] = WiFi.RSSI(j);
+    break;
+   }
+  }
+  if (rssi[i] != -127) order[visible++] = i;
+ }
+ WiFi.scanDelete();
+
+ if (visible == 0) {
+  ESP_LOGW(TAG, "[WiFi] 已存凭据均不可见（扫描到 %d 个网络），不尝试连接", found);
+  return false;
+ }
+
+ // 可见凭据按 RSSI 降序（强信号优先）
+ for (int i = 0; i < visible; i++) {
+  for (int j = i + 1; j < visible; j++) {
+   if (rssi[order[j]] > rssi[order[i]]) {
+    int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+   }
+  }
+ }
+
+ for (int k = 0; k < visible; k++) {
+  const int i = order[k];
+  ESP_LOGI(TAG, "[WiFi] 尝试可见 SSID: %s (RSSI %d)", savedCredentials[i].ssid.c_str(), rssi[i]);
+  if (connectSavedIndex(i, WIFI_CONNECT_TIMEOUT_MS)) {
+   ESP_LOGI(TAG, "\n[WiFi] Saved WiFi connected!");
+   return true;
+  }
+  ESP_LOGI(TAG, "[WiFi] SSID %s failed, trying next...", savedCredentials[i].ssid.c_str());
+ }
+
+ ESP_LOGW(TAG, "[WiFi] 可见凭据均连接失败");
  return false;
 }
 
@@ -314,20 +417,25 @@ void WiFiManager::startConfigPortal() {
  configMode = true;
 
  WiFi.mode(WIFI_AP_STA);
- WiFi.disconnect(true);
+ // 用 false 保持 AP_STA：若用 true，模式会降为「仅 AP」，之后门户点「扫描WiFi」时
+ // WiFiScanClass::scanNetworks() 内部 enableSTA(true) 会触发模式切换并重启驱动，
+ // 踢掉正在等 /scan 响应的手机，前端 fetch 直链失败（页面显示「扫描失败」）
+ WiFi.disconnect(false);
  delay(100);
 
  WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
- WiFi.softAP("ESP32-Weather", NULL, 1, false, 4);
+ updateApSsid();
+ WiFi.softAP(apSsid.c_str(), NULL, 1, false, 4);
 
  delay(500);
 
- ESP_LOGI(TAG, "AP IP: %s", WiFi.softAPIP());
- ESP_LOGI(TAG, "AP SSID: %s", WiFi.softAPSSID());
+ ESP_LOGI(TAG, "AP IP: %s", WiFi.softAPIP().toString().c_str());
+ ESP_LOGI(TAG, "AP SSID: %s", WiFi.softAPSSID().c_str());
 
  apStarted = true;
  apStartTime = millis();
 
+ startPortalDns();
  startWebServer();
 }
 
@@ -570,7 +678,13 @@ void WiFiManager::handleForget() {
 }
 
 void WiFiManager::handleNotFound() {
- webServer->send(404, "text/plain", "Not Found");
+ // Captive Portal：DNS 已把任意域名解析到本机，这里把所有未注册路径
+ // （/generate_204、/hotspot-detect.html、/connecttest.txt、/canonical.html 等
+ // 各系统的联网探测地址）统一 302 回配置页，系统据此判定"需要登录"并自动弹窗。
+ String url = "http://" + WiFi.softAPIP().toString() + "/";
+ webServer->sendHeader("Location", url, true);
+ webServer->sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+ webServer->send(302, "text/html", "<html><body><a href='" + url + "'>WiFi 配置</a></body></html>");
 }
 
 void WiFiManager::connectToWiFi(const char* ssid, const char* password, int timeoutMs) {
@@ -664,7 +778,7 @@ bool WiFiManager::isConfigMode() {
 }
 
 const char* WiFiManager::getConfigSSID() {
- return "ESP32-WeatherClock";
+ return apSsid.c_str();
 }
 
 const char* WiFiManager::getConfigPassword() {
@@ -772,6 +886,7 @@ void WiFiManager::handleSmartConfig() {
 		if (ssid.length() > 0) {
 			ESP_LOGI(TAG, "[SmartConfig] Saving credentials to NVS...");
 			saveCredentials(ssid, password);
+			_activeCredIndex = 0;   // 新保存的凭据位于索引 0
 			ESP_LOGI(TAG, "[SmartConfig] Credentials saved successfully, SSID: %s", ssid.c_str());
 		} else {
 			ESP_LOGW(TAG, "[SmartConfig] Failed to get valid SSID after retries, not saving");
@@ -779,7 +894,7 @@ void WiFiManager::handleSmartConfig() {
 	}
 
 	if (smartConfigStartTime > 0 && (millis() - smartConfigStartTime) >= SMART_CONFIG_TIMEOUT_MS) {
-		ESP_LOGI(TAG, "[SmartConfig] Timeout (2 minutes), stopping SmartConfig...");
+		ESP_LOGI(TAG, "[SmartConfig] Timeout (%lu s), stopping SmartConfig...", SMART_CONFIG_TIMEOUT_MS / 1000);
 		stopSmartConfig();
 	}
 }

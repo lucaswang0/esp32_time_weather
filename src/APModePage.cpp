@@ -67,7 +67,10 @@ void APModePage::drawStaticContent(TFT_eSPI& tft) {
     
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(TFT_WHITE);
-    tft.drawString("1. 连接 WiFi: ESP32-Weather", 5, 32);
+    // 热点名按 MAC 动态生成（esp32-xxxx），运行时读取以免与实际不符
+    char apLine[48];
+    snprintf(apLine, sizeof(apLine), "1. 连接 WiFi: %s", _wifi.getConfigSSID());
+    tft.drawString(apLine, 5, 32);
     tft.drawString("2. 浏览器访问:", 5, 56);
     
     tft.setTextColor(TFT_CYAN);
@@ -76,9 +79,6 @@ void APModePage::drawStaticContent(TFT_eSPI& tft) {
     tft.setTextColor(TFT_WHITE);
     tft.drawString("3. 选择WiFi并输入密码", 5, 80);
     tft.drawString("4. 保存后设备将重启", 5, 104);
-    
-    tft.setTextColor(TFT_CYAN);
-    tft.drawString("也使用EspTouch工具配置", 5, 128);
 
     tft.setTextColor(TFT_ORANGE);
     tft.drawString("未配置则倒计时结束后返回", 5, 152);
