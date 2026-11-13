@@ -170,6 +170,14 @@ void DisplayManager::drawTextWithTransparentBgFont(const char* text, int x, int 
     drawTextWithBgMode(text, x, y, color, font, COLOR_TRANSPARENT);
 }
 
+void DisplayManager::drawTextCenterWithTransparentBgFont(const char* text, int centerX, int y, uint16_t color, const uint8_t* font) {
+    tft.loadFont(font);
+    int w = tft.textWidth(text);
+    tft.unloadFont();
+
+    drawTextWithTransparentBgFont(text, centerX - w / 2, y, color, font);
+}
+
 void DisplayManager::drawTextWithBgMode(const char* text, int x, int y, uint16_t color,
                                           const uint8_t* font, uint16_t bgColor) {
 

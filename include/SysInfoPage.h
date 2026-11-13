@@ -19,8 +19,8 @@ private:
     bool _firstDraw;
     unsigned long _lastUpdateTime;
     
-    void drawStaticContent(TFT_eSPI& tft);
-    void updateDynamicContent(TFT_eSPI& tft);
+    void drawStaticContent();
+    void updateDynamicContent();
 };
 
 #endif

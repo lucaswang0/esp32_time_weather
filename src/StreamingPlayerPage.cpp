@@ -77,16 +77,18 @@ void StreamingPlayerPage::drawConnectingScreen() {
     tft.fillScreen(TFT_BLACK);
 
     tft.loadFont(font_small_20);
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString("等待PC客户端连接...", 2, 60);
+    // datum 是 TFT_eSPI 的全局状态，必须显式指定，否则会沿用上个页面留下的对齐方式
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawString("等待PC客户端连接...", 80, 60);
 
-    tft.setTextColor(COLOR_GRAY_DARK);
+    tft.setTextColor(COLOR_GRAY_DARK, TFT_BLACK);
     tft.drawString(WiFi.localIP().toString().c_str(), 160, 95);
     char portStr[16];
     snprintf(portStr, sizeof(portStr), "端口:%d", SERVER_PORT);
     tft.drawString(portStr, 160, 115);
 
-    tft.setTextColor(COLOR_GRAY_MID);
+    tft.setTextColor(COLOR_GRAY_MID, TFT_BLACK);
     tft.drawString("触摸返回", 160, 146);
 
     tft.unloadFont();
@@ -98,12 +100,13 @@ void StreamingPlayerPage::drawErrorScreen(const char* msg) {
 
     tft.loadFont(font_small_20);
     tft.setTextDatum(TC_DATUM);
-    tft.setTextColor(TFT_WHITE);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.drawString(msg, 160, 70);
 
-    tft.setTextColor(COLOR_GRAY_MID);
+    tft.setTextColor(COLOR_GRAY_MID, TFT_BLACK);
     tft.drawString("双击重试", 160, 146);
 
+    tft.setTextDatum(TL_DATUM);  // 还原，避免影响后续页面
     tft.unloadFont();
 }
 
@@ -121,6 +124,7 @@ void StreamingPlayerPage::drawDisconnectedOverlay(bool visible) {
     } else {
         tft.fillRect(160 - w / 2 - 2, 85 - h / 2 - 2, w + 4, h + 4, TFT_BLACK);
     }
+    tft.setTextDatum(TL_DATUM);  // 还原，避免影响后续页面
     tft.unloadFont();
 }
 

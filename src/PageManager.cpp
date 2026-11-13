@@ -88,6 +88,8 @@ void PageManager::switchTo(PageMode mode) {
     _display.fadeOut(200);
     _pages[_current]->onExit();
     _current = mode;
+    // 文字对齐基准是全局状态，统一复位，避免上个页面遗留的 datum 造成文字左右偏移
+    _display.getTFT().setTextDatum(TL_DATUM);
     _pages[_current]->onEnter();
     _display.fadeIn(200);
 

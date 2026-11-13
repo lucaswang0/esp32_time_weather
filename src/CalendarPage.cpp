@@ -52,19 +52,15 @@ void CalendarPage::drawCalendar(int year, int month, int day) {
     
     int numDays = daysInMonth[month - 1];
 
-    tft.setTextColor(TFT_WHITE);
-    tft.setTextDatum(TC_DATUM);
-    tft.loadFont(font_small_20);
     char title[20];
     sprintf(title, "%d年%d月", year, month);
-    tft.drawString(title, 160, 2);
-    tft.unloadFont();
+    _display.drawTextCenterWithTransparentBgFont(title, 160, 2, TFT_WHITE, font_small_20);
 
-    tft.loadFont(font_small_20);
     const char* weekDays[] = {"日", "一", "二", "三", "四", "五", "六"};
     for (int i = 0; i < 7; i++) {
-        tft.setTextColor((i == 0 || i == 6) ? COLOR_GOLD_WARM : TFT_WHITE);
-        tft.drawString(weekDays[i], 20 + i * 45, 22);
+        _display.drawTextCenterWithTransparentBgFont(weekDays[i], 20 + i * 45, 22,
+                                                     (i == 0 || i == 6) ? COLOR_GOLD_WARM : TFT_WHITE,
+                                                     font_small_20);
     }
 
     int dayX = 20;
@@ -76,20 +72,23 @@ void CalendarPage::drawCalendar(int year, int month, int day) {
     }
 
     for (int d = 1; d <= numDays; d++) {
-        tft.setTextDatum(TC_DATUM);
         bool isWeekend = (dayIndex == 0 || dayIndex == 6);
-        if (d == day) {
-            tft.fillCircle(dayX, dayY + 9, 14, COLOR_PRIMARY);
-            tft.setTextColor(TFT_WHITE);
-        } else if (isWeekend) {
-            tft.setTextColor(COLOR_GOLD_WARM);
-        } else {
-            tft.setTextColor(TFT_WHITE);
-        }
-
         char dayStr[4];
         sprintf(dayStr, "%d", d);
-        tft.drawString(dayStr, dayX, dayY);
+
+        if (d == day) {
+            // 当天：先画圆再直接绘字，抗锯齿以圆圈色混合，避免擦掉圆圈
+            tft.fillCircle(dayX, dayY + 9, 14, COLOR_PRIMARY);
+            tft.loadFont(font_small_20);
+            tft.setTextDatum(TC_DATUM);
+            tft.setTextColor(TFT_WHITE, COLOR_PRIMARY);
+            tft.drawString(dayStr, dayX, dayY);
+            tft.unloadFont();
+        } else {
+            _display.drawTextCenterWithTransparentBgFont(dayStr, dayX, dayY,
+                                                         isWeekend ? COLOR_GOLD_WARM : TFT_WHITE,
+                                                         font_small_20);
+        }
 
         dayX += 45;
         dayIndex++;
@@ -100,6 +99,4 @@ void CalendarPage::drawCalendar(int year, int month, int day) {
             dayY += 22;
         }
     }
-
-    tft.unloadFont();
 }

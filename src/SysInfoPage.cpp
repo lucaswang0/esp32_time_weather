@@ -22,12 +22,11 @@ void WiFiInfoPage::onExit() {
 }
 
 void WiFiInfoPage::update() {
-    auto& tft = _display.getTFT();
     unsigned long now = millis();
     
     if (_firstDraw) {
         _firstDraw = false;
-        drawStaticContent(tft);
+        drawStaticContent();
     }
     
     if (now - _lastUpdateTime < 1000) {
@@ -35,23 +34,18 @@ void WiFiInfoPage::update() {
     }
     _lastUpdateTime = now;
     
-    updateDynamicContent(tft);
+    updateDynamicContent();
 }
 
-void WiFiInfoPage::drawStaticContent(TFT_eSPI& tft) {
-    tft.loadFont(font_small_20);
-    tft.setTextDatum(TL_DATUM);
-    
-    tft.setTextColor(TFT_WHITE);
+void WiFiInfoPage::drawStaticContent() {
     // tft.drawString("连接状态:", 5, 5);
-    tft.drawString("WiFi名称:", 5, 5);
-    tft.drawString("IP地址:", 5, 28);
-    tft.drawString("DNS地址:", 5, 51);
-    tft.drawString("信号强度:", 5, 74);
-    tft.drawString("Min/Free/Total:", 5, 97);
-    tft.drawString("Uptime:", 5, 120);
-    tft.drawString("芯片温度:", 5, 143);
-    tft.setTextColor(COLOR_GOLD_WARM);
+    _display.drawTextWithTransparentBg("WiFi名称:", 5, 5, TFT_WHITE);
+    _display.drawTextWithTransparentBg("IP地址:", 5, 28, TFT_WHITE);
+    _display.drawTextWithTransparentBg("DNS地址:", 5, 51, TFT_WHITE);
+    _display.drawTextWithTransparentBg("信号强度:", 5, 74, TFT_WHITE);
+    _display.drawTextWithTransparentBg("Min/Free/Total:", 5, 97, TFT_WHITE);
+    _display.drawTextWithTransparentBg("Uptime:", 5, 120, TFT_WHITE);
+    _display.drawTextWithTransparentBg("芯片温度:", 5, 143, TFT_WHITE);
     // tft.drawString("长按10秒进入AP配网", 5, 180);
         // 准备要显示的文字数组
     const char* chars[] = {"长按", "10秒", "进入", "AP", "配网"};
@@ -65,33 +59,24 @@ void WiFiInfoPage::drawStaticContent(TFT_eSPI& tft) {
         int y = startY + i * spacing;
         // 确保不超出170
         if (y > 170) break;
-        tft.drawString(chars[i], x, y);
+        _display.drawTextWithTransparentBg(chars[i], x, y, COLOR_GOLD_WARM);
     }
-    
-    tft.unloadFont();
 }
 
-void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
-    tft.loadFont(font_small_20);
-    tft.setTextDatum(TL_DATUM);
-    
+void WiFiInfoPage::updateDynamicContent() {
     bool connected = _wifi.isConnected();
     
-    // tft.setTextColor(connected ? TFT_GREEN : TFT_RED);
     // tft.drawString(connected ? "已连接" : "未连接", 120, 5);
     
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(_wifi.getSSID(), 120, 5);
+    _display.drawTextWithTransparentBg(_wifi.getSSID(), 120, 5, TFT_WHITE);
     
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString(_wifi.getLocalIP(), 120, 28);
-    tft.drawString(_wifi.getdnsIP(), 120, 51);
+    _display.drawTextWithTransparentBg(_wifi.getLocalIP(), 120, 28, TFT_WHITE);
+    _display.drawTextWithTransparentBg(_wifi.getdnsIP(), 120, 51, TFT_WHITE);
     
     // 清除该区域的旧内容（加一点边距防止边缘残留）
     // tft.fillRect(120, 105, strWidth + 5, 20, TFT_BLACK);
     // tft.drawString(rssiStr, 120, 105);
 
-    // tft.setTextColor(TFT_WHITE);
     // char reconnectStr[16];
     // snprintf(reconnectStr, sizeof(reconnectStr), "%d", _wifi.getReconnectCount());
     // tft.drawString(reconnectStr, 120, 130);
@@ -120,8 +105,6 @@ void WiFiInfoPage::updateDynamicContent(TFT_eSPI& tft) {
     char tempStr[16];
     snprintf(tempStr, sizeof(tempStr), "%.1fC", temperatureRead());
     _display.drawTextWithTransparentBgFont(tempStr, 130, 143, TFT_CYAN, font_small_20);
-
-    tft.unloadFont();
 
     char rssiStr[16];
     snprintf(rssiStr, sizeof(rssiStr), "%d dBm", _wifi.getRSSI());

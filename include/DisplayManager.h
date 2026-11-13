@@ -54,6 +54,7 @@ public:
     void drawTextWithBgFont(const char* text, int x, int y, uint16_t color, const uint8_t* font);
     void drawTextWithTransparentBg(const char* text, int x, int y, uint16_t color);
     void drawTextWithTransparentBgFont(const char* text, int x, int y, uint16_t color, const uint8_t* font);
+    void drawTextCenterWithTransparentBgFont(const char* text, int centerX, int y, uint16_t color, const uint8_t* font);
     
     TFT_eSPI& getTFT() { return tft; }
     
