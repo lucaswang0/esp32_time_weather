@@ -256,6 +256,10 @@ void WiFiManager::startAPMode() {
  apStarted = true;
  apStartTime = millis();
 
+ // 提前扫描一次，配置页打开即可直接列出周边 AP
+ scanNetworks();
+ ESP_LOGI(TAG, "[WiFi] 预扫描完成：%d 个网络", networksFound);
+
  startPortalDns();
  startWebServer();
 }
@@ -264,6 +268,9 @@ void WiFiManager::stopAPMode() {
  stopPortalDns();
 
  if (!apStarted) return;
+
+ WiFi.scanDelete();
+ scanComplete = false;
 
  ESP_LOGI(TAG, "Stopping AP mode...");
  WiFi.softAPdisconnect(true);
@@ -435,6 +442,10 @@ void WiFiManager::startConfigPortal() {
  apStarted = true;
  apStartTime = millis();
 
+ // 提前扫描一次，配置页打开即可直接列出周边 AP
+ scanNetworks();
+ ESP_LOGI(TAG, "[WiFi] 预扫描完成：%d 个网络", networksFound);
+
  startPortalDns();
  startWebServer();
 }
@@ -489,57 +500,98 @@ void WiFiManager::startWebServer() {
 }
 
 void WiFiManager::handleRoot() {
- String html = R"rawliteral(
+ String html = R"HTML(
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
- <meta charset='UTF-8'>
+ <meta charset="UTF-8">
  <meta name="viewport" content="width=device-width,initial-scale=1.0">
- <title>ESP32 Weather Clock WiFi配置</title>
+ <title>网络配置</title>
  <style>
- * { margin: 0; padding: 0; box-sizing: border-box; }
- body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }
- .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
- h2 { text-align: center; color: #333; margin-bottom: 20px; }
- h3 { color: #555; margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
- .form-group { margin-bottom: 15px; }
- label { display: block; margin-bottom: 5px; color: #666; }
- select, input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
- button { width: 100%; padding: 12px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-bottom: 10px; }
- button.scan { background: #2196F3; color: white; }
- button.scan:hover { background: #1976D2; }
- button.save { background: #4CAF50; color: white; }
- button.save:hover { background: #45a049; }
- button.forget { background: #f44336; color: white; font-size: 12px; padding: 6px 10px; width: auto; }
- button.forget:hover { background: #d32f2f; }
- .status { text-align: center; margin-top: 10px; color: #666; }
- .loading { text-align: center; padding: 20px; }
- .saved-list { list-style: none; padding: 0; }
- .saved-list li { background: #f8f8f8; padding: 10px; border-radius: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
- .saved-list li .ssid-name { font-weight: bold; color: #333; }
- .saved-list li .password-hint { font-size: 12px; color: #999; }
- .no-saved { color: #999; text-align: center; padding: 10px; }
+  :root {
+   --accent: #2563eb; --accent-hover: #1d4ed8; --accent-soft: rgba(37,99,235,.10);
+   --bg-grad-1: #eef2ff; --bg-grad-2: #e0f2fe;
+   --surface: #ffffff; --surface-muted: #f5f7fb;
+   --border: #e2e8f0; --border-strong: #cbd5e1;
+   --text: #0f172a; --text-muted: #64748b;
+   --danger: #dc2626; --success: #16a34a;
+   --radius: 14px; --radius-sm: 10px;
+   --shadow: 0 10px 30px rgba(15,23,42,.08), 0 2px 6px rgba(15,23,42,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+   :root {
+    --accent: #60a5fa; --accent-hover: #93c5fd; --accent-soft: rgba(96,165,250,.16);
+    --bg-grad-1: #0b1220; --bg-grad-2: #111827;
+    --surface: #1e293b; --surface-muted: #18233a;
+    --border: #334155; --border-strong: #475569;
+    --text: #e2e8f0; --text-muted: #94a3b8;
+    --danger: #f87171; --success: #4ade80;
+    --shadow: 0 10px 30px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.25);
+   }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; padding: 20px; color: var(--text);
+   background: linear-gradient(160deg, var(--bg-grad-1), var(--bg-grad-2));
+   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .page { max-width: 460px; margin: 0 auto; }
+  .app-header { display: flex; align-items: center; gap: 10px; margin: 2px 2px 14px; }
+  .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft);
+   color: var(--accent); display: flex; align-items: center; justify-content: center; }
+  .logo svg { width: 20px; height: 20px; }
+  .app-header h1 { margin: 0; font-size: 18px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+   box-shadow: var(--shadow); padding: 18px; }
+  .section + .section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+  h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--text-muted); }
+  ul.saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  ul.saved li { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+   background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .ssid-name { font-weight: 600; font-size: 14px; word-break: break-all; }
+  .pass-hint { margin-top: 2px; font-size: 12px; color: var(--text-muted); }
+  .empty { justify-content: center !important; color: var(--text-muted); font-size: 13px; }
+  button { cursor: pointer; font-family: inherit; border-radius: var(--radius-sm); }
+  button.del { background: transparent; color: var(--danger); border: 1px solid var(--border); padding: 6px 10px; font-size: 12px; }
+  .field { margin-bottom: 12px; }
+  label { display: block; margin: 0 0 6px; font-size: 13px; color: var(--text-muted); }
+  input { width: 100%; padding: 11px 12px; font-size: 15px; color: var(--text);
+   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .row { display: flex; gap: 10px; }
+  button.primary { flex: 1; padding: 12px; font-size: 15px; font-weight: 600; color: #fff;
+   background: var(--accent); border: none; }
+  button.primary:hover { background: var(--accent-hover); }
+  button.ghost { padding: 10px 12px; font-size: 13px; color: var(--text-muted);
+   background: transparent; border: 1px solid var(--border-strong); }
+  #status { margin-top: 10px; min-height: 18px; font-size: 13px; color: var(--text-muted); }
+  #status.err { color: var(--danger); }
+  #status.ok { color: var(--success); }
+  #ap_list { margin-top: 14px; display: grid; gap: 6px; }
+  #ap_list p { margin: 0; font-size: 13px; color: var(--text-muted); }
+  .ap { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+   padding: 10px 12px; font-size: 14px; color: var(--text); text-decoration: none;
+   background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .ap:hover, .ap:active { border-color: var(--accent); }
+  .ap .ssid { word-break: break-all; }
+  .ap .meta { flex-shrink: 0; font-size: 12px; color: var(--text-muted); }
  </style>
 </head>
 <body>
- <div class="container">
- <h2>WiFi 配置</h2>
- <div class="form-group">
- <label>选择WiFi网络:</label>
- <select id="wifiSelect">
- <option value="">-- 点击扫描 --</option>
- </select>
- </div>
- <button class="scan" onclick="scanNetworks()">扫描WiFi</button>
- <div class="form-group">
- <label>WiFi密码:</label>
- <input type="text" id="password" placeholder="请输入密码">
- </div>
- <button class="save" onclick="saveConfig()">保存并连接</button>
- <div class="status" id="status"></div>
-
- <h3>已保存的WiFi网络</h3>
- <ul id="savedList" class="saved-list">)rawliteral";
+ <div class="page">
+  <header class="app-header">
+   <span class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+     <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+     <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+     <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+     <line x1="12" y1="20" x2="12.01" y2="20"/>
+    </svg>
+   </span>
+   <h1>网络配置</h1>
+  </header>
+  <div class="card">
+   <div class="section">
+    <h3>已保存的 Wi-Fi</h3>
+    <ul class="saved" id="savedList">)HTML";
 
  for (int i = 0; i < credentialCount; i++) {
   String ssid = savedCredentials[i].ssid;
@@ -550,105 +602,141 @@ void WiFiManager::handleRoot() {
   for (int j = 0; j < (int)savedCredentials[i].password.length(); j++) {
    maskedPass += "*";
   }
-  html += "<li><div><span class='ssid-name'>" + ssid + "</span><br><span class='password-hint'>密码: " + maskedPass + "</span></div><button class='forget' onclick=\"forgetWifi('" + escapedSsid + "')\">删除</button></li>";
+  html += "<li><div><div class='ssid-name'>" + ssid + "</div><div class='pass-hint'>密码: " + maskedPass + "</div></div><button class='del' onclick=\"forgetWifi('" + escapedSsid + "')\">删除</button></li>";
  }
 
  if (credentialCount == 0) {
-  html += "<li class='no-saved'>暂无已保存的WiFi网络</li>";
+  html += "<li class='empty'>暂无已保存的 Wi-Fi</li>";
  }
 
- html += R"rawliteral(</ul>
+ html += R"HTML(</ul>
+   </div>
+   <div class="section">
+    <h3>连接到新的 Wi-Fi</h3>
+    <div class="field">
+     <label for="ssid">SSID</label>
+     <input id="ssid" readonly placeholder="点击下方 Wi-Fi 列表选择">
+    </div>
+    <div class="field">
+     <label for="password">密码</label>
+     <input id="password" type="password" placeholder="开放网络可留空">
+    </div>
+    <div class="row">
+     <button class="primary" onclick="saveConfig()">连接</button>
+     <button class="ghost" onclick="loadAPList(true)">重新扫描</button>
+    </div>
+    <div id="status"></div>
+    <div id="ap_list"><p>正在扫描周边 Wi-Fi...</p></div>
+   </div>
+  </div>
  </div>
  <script>
- function scanNetworks() {
-  var select = document.getElementById('wifiSelect');
-  select.innerHTML = '<option value="">-- 扫描中... --</option>';
+  let scanning = false;
+  let hasList = false;
 
-  fetch('/scan')
-  .then(r => r.json())
-  .then(data => {
-   select.innerHTML = '';
-   data.forEach(net => {
-    var opt = document.createElement('option');
-    opt.value = net.ssid;
-    opt.text = net.ssid + ' (' + net.rssi + ' dBm)';
-    select.appendChild(opt);
-   });
-   if (data.length === 0) {
-    select.innerHTML = '<option value="">未找到WiFi</option>';
+  function loadAPList(rescan) {
+   if (scanning) return;
+   scanning = true;
+   const box = document.getElementById('ap_list');
+   if (!hasList) box.innerHTML = '<p>正在扫描周边 Wi-Fi...</p>';
+
+   fetch('/scan' + (rescan ? '?rescan=1' : ''))
+    .then(r => r.json())
+    .then(list => {
+     hasList = true;
+     box.innerHTML = '';
+     const tip = document.createElement('p');
+     tip.textContent = list.length ? '选择要连接的 Wi-Fi：' : '未发现周边 Wi-Fi，请点击“重新扫描”';
+     box.appendChild(tip);
+
+     list.sort((a, b) => b.rssi - a.rssi).forEach(ap => {
+      const item = document.createElement('a');
+      item.className = 'ap';
+      item.href = '#';
+      const name = document.createElement('span');
+      name.className = 'ssid';
+      name.textContent = ap.ssid || '(隐藏网络)';
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = (ap.authmode === 0 ? '🌐 ' : '🔒 ') + ap.rssi + ' dBm';
+      item.appendChild(name);
+      item.appendChild(meta);
+      item.onclick = e => {
+       e.preventDefault();
+       document.getElementById('ssid').value = ap.ssid;
+      };
+      box.appendChild(item);
+     });
+     scanning = false;
+    })
+    .catch(() => {
+     box.innerHTML = '<p>扫描失败，请点击“重新扫描”</p>';
+     scanning = false;
+    });
+  }
+
+  function saveConfig() {
+   const ssid = document.getElementById('ssid').value;
+   const password = document.getElementById('password').value;
+   const st = document.getElementById('status');
+   if (!ssid) {
+    st.className = 'err';
+    st.textContent = '请先选择 Wi-Fi 网络';
+    return;
    }
-  })
-  .catch(err => {
-   select.innerHTML = '<option value="">扫描失败</option>';
-  });
- }
-
- function saveConfig() {
-  var ssid = document.getElementById('wifiSelect').value;
-  var password = document.getElementById('password').value;
-
-  if (!ssid) {
-   document.getElementById('status').textContent = '请先扫描并选择WiFi网络';
-   return;
+   st.className = '';
+   st.textContent = '正在保存，设备将重启…';
+   const fd = new FormData();
+   fd.append('ssid', ssid);
+   fd.append('password', password);
+   fetch('/save', { method: 'POST', body: fd })
+    .then(r => r.text())
+    .then(() => {
+     st.className = 'ok';
+     st.innerHTML = '配置已保存，设备正在重启<br><small>请重新连接 Wi-Fi</small>';
+    })
+    .catch(() => {
+     st.className = 'err';
+     st.textContent = '保存失败，请重试';
+    });
   }
 
-  document.getElementById('status').textContent = '正在保存...';
-
-  var formData = new FormData();
-  formData.append('ssid', ssid);
-  formData.append('password', password);
-
-  fetch('/save', { method: 'POST', body: formData })
-  .then(r => r.text())
-  .then(data => {
-   document.getElementById('status').innerHTML = '配置已保存，设备将重启<br><small>请重新连接WiFi</small>';
-  })
-  .catch(err => {
-   document.getElementById('status').textContent = '保存失败';
-  });
- }
-
- function forgetWifi(ssid) {
-  if (!confirm('确定要删除此WiFi配置吗？')) {
-   return;
+  function forgetWifi(ssid) {
+   if (!confirm('确定删除 ' + ssid + ' 的配置？')) return;
+   fetch('/forget?ssid=' + encodeURIComponent(ssid), { method: 'POST' })
+    .then(() => location.reload())
+    .catch(() => alert('删除失败'));
   }
 
-  fetch('/forget?ssid=' + encodeURIComponent(ssid), { method: 'POST' })
-  .then(r => r.text())
-  .then(data => {
-   location.reload();
-  })
-  .catch(err => {
-   alert('删除失败');
-  });
- }
+  document.addEventListener('DOMContentLoaded', () => loadAPList(false));
  </script>
 </body>
 </html>
-)rawliteral";
+)HTML";
 
  webServer->send(200, "text/html", html);
 }
 
 void WiFiManager::handleScan() {
- ESP_LOGI(TAG, "Scanning networks...");
+ // 进入配网时已预扫描一次；仅首次（无缓存）或显式 ?rescan=1 时重新扫描
+ bool rescan = webServer->hasArg("rescan") || !scanComplete;
+ if (rescan) {
+  ESP_LOGI(TAG, "Scanning networks...");
+  scanNetworks();
+  ESP_LOGI(TAG, "Scan done: %d networks", networksFound);
+ }
 
- WiFi.disconnect(false);
- delay(100);
-
- networksFound = WiFi.scanNetworks(false, false);
  String json = "[";
  for (int i = 0; i < networksFound; i++) {
   if (i > 0) json += ",";
   String ssid = WiFi.SSID(i);
   ssid.replace("\"", "\\\"");
-  json += "{\"ssid\":\"" + ssid + "\",\"rssi\":" + WiFi.RSSI(i) + "}";
+  json += "{\"ssid\":\"" + ssid + "\",\"rssi\":" + String(WiFi.RSSI(i)) +
+          ",\"authmode\":" + String((int)WiFi.encryptionType(i)) + "}";
  }
  json += "]";
 
  webServer->send(200, "application/json", json);
-
- WiFi.scanDelete();
 }
 
 void WiFiManager::handleSave() {
